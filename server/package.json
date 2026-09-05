@@ -15,7 +15,8 @@
     "db:studio": "node ./node_modules/prisma/build/index.js studio",
     "test:constraints": "node ./node_modules/tsx/dist/cli.mjs scripts/verify-constraints.ts",
     "test:checkout": "node ./node_modules/tsx/dist/cli.mjs scripts/test-concurrent-checkout.ts",
-    "test:phase2": "node ./node_modules/tsx/dist/cli.mjs scripts/verify-phase2.ts"
+    "test:phase2": "node ./node_modules/tsx/dist/cli.mjs scripts/verify-phase2.ts",
+    "test:phase3": "node ./node_modules/tsx/dist/cli.mjs scripts/verify-phase3.ts"
   },
   "prisma": {
     "seed": "node ./node_modules/tsx/dist/cli.mjs prisma/seed.ts"

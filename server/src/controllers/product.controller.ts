@@ -50,20 +50,32 @@ export const updateProductSchema = z.object({
   status: z.nativeEnum(ProductStatus).optional(),
 });
 
-export const adjustStockSchema = z.object({
-  adjustment: z
-    .number()
-    .int({ message: 'Stock adjustment must be an integer.' })
-    .optional(),
-  stockQuantity: z
-    .number()
-    .int({ message: 'Stock quantity must be an integer.' })
-    .nonnegative({ message: 'Stock quantity cannot be negative.' })
-    .optional(),
-}).refine(
-  (data) => data.adjustment !== undefined || data.stockQuantity !== undefined,
-  { message: 'Either "adjustment" (delta) or "stockQuantity" (absolute) must be provided.' }
-);
+export const adjustStockSchema = z
+  .object({
+    adjustment: z
+      .number()
+      .int({ message: 'Stock adjustment must be an integer.' })
+      .optional(),
+    adjustmentQuantity: z
+      .number()
+      .int({ message: 'Stock adjustment must be an integer.' })
+      .optional(),
+    stockQuantity: z
+      .number()
+      .int({ message: 'Stock quantity must be an integer.' })
+      .nonnegative({ message: 'Stock quantity cannot be negative.' })
+      .optional(),
+  })
+  .refine(
+    (data) =>
+      data.adjustment !== undefined ||
+      data.adjustmentQuantity !== undefined ||
+      data.stockQuantity !== undefined,
+    {
+      message:
+        'Either "adjustmentQuantity"/"adjustment" (delta) or "stockQuantity" (absolute) must be provided.',
+    }
+  );
 
 // ============================================================================
 // 2. Controller Handlers
@@ -157,6 +169,13 @@ export async function getProductsHandler(req: Request, res: Response): Promise<v
       pagination: {
         page: pageNum,
         limit: take,
+        totalItems: totalCount,
+        totalPages: Math.max(1, Math.ceil(totalCount / take)),
+      },
+      meta: {
+        page: pageNum,
+        limit: take,
+        total: totalCount,
         totalItems: totalCount,
         totalPages: Math.max(1, Math.ceil(totalCount / take)),
       },
@@ -367,7 +386,8 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
     return;
   }
 
-  const { adjustment, stockQuantity } = parseResult.data;
+  const { adjustment, adjustmentQuantity, stockQuantity } = parseResult.data;
+  const effectiveAdjustment = adjustmentQuantity !== undefined ? adjustmentQuantity : adjustment;
 
   try {
     const product = await prisma.product.findFirst({
@@ -386,8 +406,8 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
     let nextStock: number;
     if (stockQuantity !== undefined) {
       nextStock = stockQuantity;
-    } else if (adjustment !== undefined) {
-      nextStock = product.stockQuantity + adjustment;
+    } else if (effectiveAdjustment !== undefined) {
+      nextStock = product.stockQuantity + effectiveAdjustment;
     } else {
       res.status(400).json({ success: false, error: 'BAD_REQUEST', message: 'Missing adjustment parameter.' });
       return;
@@ -412,7 +432,12 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
 
     res.json({
       success: true,
-      data: updated,
+      data: {
+        ...updated,
+        previousStock: product.stockQuantity,
+        newStock: updated.stockQuantity,
+        adjustmentQuantity: effectiveAdjustment,
+      },
     });
   } catch (err: any) {
     console.error('Error in adjustStockHandler:', err);

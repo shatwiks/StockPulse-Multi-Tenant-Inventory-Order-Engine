@@ -3,54 +3,124 @@
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Modal } from './modal'
-import { categories, type CategoryKey, type Product } from '@/lib/inventory-data'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient } from '@/lib/api-client'
+import { toast } from '@/lib/toast-context'
+import { Loader2 } from 'lucide-react'
 
 type AddProductModalProps = {
   open: boolean
   onClose: () => void
-  onCreate: (product: Product) => void
 }
 
 const fieldClass =
   'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring'
 
-export function AddProductModal({ open, onClose, onCreate }: AddProductModalProps) {
+export function AddProductModal({ open, onClose }: AddProductModalProps) {
+  const queryClient = useQueryClient()
   const nameId = useId()
   const skuId = useId()
   const catId = useId()
   const priceId = useId()
   const stockId = useId()
   const reorderId = useId()
+  const descId = useId()
 
   const [name, setName] = useState('')
   const [sku, setSku] = useState('')
-  const [category, setCategory] = useState<CategoryKey>('fasteners')
+  const [categoryId, setCategoryId] = useState('')
   const [price, setPrice] = useState('')
   const [stock, setStock] = useState('')
-  const [reorderPoint, setReorderPoint] = useState('')
+  const [reorderPoint, setReorderPoint] = useState('10')
+  const [description, setDescription] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  // Fetch categories from live backend
+  const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await apiClient.get('categories')
+      return res.data || []
+    },
+    enabled: open,
+  })
+
+  const categoriesList = categoriesData || []
 
   function reset() {
     setName('')
     setSku('')
-    setCategory('fasteners')
+    setCategoryId('')
     setPrice('')
     setStock('')
-    setReorderPoint('')
+    setReorderPoint('10')
+    setDescription('')
+    setValidationError(null)
   }
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      return await apiClient.post('products', payload)
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      toast.success(`Product ${data.data?.sku || ''} created successfully!`, 'Product Saved')
+      reset()
+      onClose()
+    },
+    onError: (err: any) => {
+      const msg = err.message || 'Failed to create product.'
+      setValidationError(msg)
+      toast.error(msg, 'Creation Error')
+    },
+  })
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    onCreate({
-      id: `p-${Date.now()}`,
+    setValidationError(null)
+
+    // Client-side validation guardrails
+    const parsedPrice = Number.parseFloat(price)
+    const parsedStock = Number.parseInt(stock, 10)
+    const parsedReorder = Number.parseInt(reorderPoint, 10)
+
+    if (!name.trim()) {
+      setValidationError('Product name is required.')
+      return
+    }
+    if (!sku.trim()) {
+      setValidationError('SKU is required.')
+      return
+    }
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      setValidationError('Unit price must be strictly greater than 0.')
+      return
+    }
+    if (isNaN(parsedStock) || parsedStock < 0) {
+      setValidationError('Current stock must be greater than or equal to 0.')
+      return
+    }
+    if (isNaN(parsedReorder) || parsedReorder < 0) {
+      setValidationError('Reorder point must be greater than or equal to 0.')
+      return
+    }
+
+    const selectedCat = categoryId || categoriesList[0]?.id
+    if (!selectedCat) {
+      setValidationError('Please select a valid category.')
+      return
+    }
+
+    createMutation.mutate({
       name: name.trim(),
       sku: sku.trim().toUpperCase(),
-      category,
-      price: Number.parseFloat(price) || 0,
-      stock: Number.parseInt(stock, 10) || 0,
-      reorderPoint: Number.parseInt(reorderPoint, 10) || 0,
+      categoryId: selectedCat,
+      unitPrice: parsedPrice,
+      costPrice: parsedPrice * 0.6, // estimated 40% margin
+      stockQuantity: parsedStock,
+      reorderLevel: parsedReorder,
+      description: description.trim() || undefined,
     })
-    reset()
-    onClose()
   }
 
   return (
@@ -58,30 +128,45 @@ export function AddProductModal({ open, onClose, onCreate }: AddProductModalProp
       open={open}
       onClose={onClose}
       title="Add new product"
-      description="Create a SKU and set its initial stock levels."
+      description="Create a verified SKU and establish initial inventory stock levels."
       size="lg"
       footer={
         <>
-          <Button variant="outline" type="button" onClick={onClose}>
+          <Button variant="outline" type="button" onClick={onClose} disabled={createMutation.isPending}>
             Cancel
           </Button>
-          <Button type="submit" form="add-product-form">
-            Save product
+          <Button
+            type="submit"
+            form="add-product-form"
+            disabled={createMutation.isPending}
+            className="gap-2"
+          >
+            {createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+            <span>{createMutation.isPending ? 'Saving...' : 'Save product'}</span>
           </Button>
         </>
       }
     >
       <form id="add-product-form" onSubmit={handleSubmit} className="grid gap-4">
+        {validationError && (
+          <div
+            role="alert"
+            className="rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-xs font-semibold text-destructive"
+          >
+            {validationError}
+          </div>
+        )}
+
         <div className="grid gap-1.5">
           <label htmlFor={nameId} className="text-sm font-medium">
-            Product name
+            Product name <span className="text-destructive">*</span>
           </label>
           <input
             id={nameId}
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Hex Bolts M8 x 50mm"
+            placeholder="e.g. Wireless Noise-Cancelling Headphones"
             className={fieldClass}
           />
         </div>
@@ -89,30 +174,31 @@ export function AddProductModal({ open, onClose, onCreate }: AddProductModalProp
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <label htmlFor={skuId} className="text-sm font-medium">
-              SKU
+              SKU <span className="text-destructive">*</span>
             </label>
             <input
               id={skuId}
               required
               value={sku}
               onChange={(e) => setSku(e.target.value)}
-              placeholder="HEX-M8-50"
+              placeholder="ACME-AUDIO-09"
               className={`${fieldClass} font-mono uppercase`}
             />
           </div>
           <div className="grid gap-1.5">
             <label htmlFor={catId} className="text-sm font-medium">
-              Category
+              Category <span className="text-destructive">*</span>
             </label>
             <select
               id={catId}
-              value={category}
-              onChange={(e) => setCategory(e.target.value as CategoryKey)}
+              value={categoryId || categoriesList[0]?.id || ''}
+              onChange={(e) => setCategoryId(e.target.value)}
+              disabled={categoriesLoading}
               className={fieldClass}
             >
-              {categories.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
+              {categoriesList.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </select>
@@ -122,23 +208,23 @@ export function AddProductModal({ open, onClose, onCreate }: AddProductModalProp
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="grid gap-1.5">
             <label htmlFor={priceId} className="text-sm font-medium">
-              Unit price
+              Unit price (USD) <span className="text-destructive">*</span>
             </label>
             <input
               id={priceId}
               required
               type="number"
-              min="0"
+              min="0.01"
               step="0.01"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="0.00"
+              placeholder="89.99"
               className={fieldClass}
             />
           </div>
           <div className="grid gap-1.5">
             <label htmlFor={stockId} className="text-sm font-medium">
-              Current stock
+              Initial stock <span className="text-destructive">*</span>
             </label>
             <input
               id={stockId}
@@ -148,13 +234,13 @@ export function AddProductModal({ open, onClose, onCreate }: AddProductModalProp
               step="1"
               value={stock}
               onChange={(e) => setStock(e.target.value)}
-              placeholder="0"
+              placeholder="50"
               className={fieldClass}
             />
           </div>
           <div className="grid gap-1.5">
             <label htmlFor={reorderId} className="text-sm font-medium">
-              Reorder point
+              Reorder point <span className="text-destructive">*</span>
             </label>
             <input
               id={reorderId}
@@ -164,10 +250,24 @@ export function AddProductModal({ open, onClose, onCreate }: AddProductModalProp
               step="1"
               value={reorderPoint}
               onChange={(e) => setReorderPoint(e.target.value)}
-              placeholder="0"
+              placeholder="10"
               className={fieldClass}
             />
           </div>
+        </div>
+
+        <div className="grid gap-1.5">
+          <label htmlFor={descId} className="text-sm font-medium">
+            Description (Optional)
+          </label>
+          <textarea
+            id={descId}
+            rows={2}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Detailed specifications or warehouse bin instructions..."
+            className={`${fieldClass} resize-none`}
+          />
         </div>
       </form>
     </Modal>

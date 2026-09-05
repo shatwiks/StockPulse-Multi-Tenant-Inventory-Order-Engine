@@ -245,15 +245,23 @@ export async function placeOrderHandler(req: Request, res: Response): Promise<vo
     res.status(201).json({
       success: true,
       message: 'Order successfully placed and inventory deducted.',
-      data: createdOrder,
+      data: {
+        ...createdOrder,
+        order: createdOrder,
+      },
     });
   } catch (err: any) {
     if (err instanceof InsufficientStockError) {
       res.status(409).json({
         success: false,
-        error: err.code,
+        error: {
+          code: err.code,
+          message: err.message,
+          details: err.shortages,
+        },
         message: err.message,
         shortages: err.shortages,
+        details: err.shortages,
       });
       return;
     }

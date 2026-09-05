@@ -22,15 +22,18 @@ import {
   Building2,
   FileText,
   RotateCcw,
+  AlertTriangle,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react'
 import {
-  products as seedProducts,
-  categories,
+  categories as fallbackCategories,
   categoryLabel,
   categoryImage,
   usd,
   customers,
   TAX_RATE,
+  normalizeProduct,
   type Product,
   type CategoryKey,
   type Customer,
@@ -38,6 +41,10 @@ import {
 import { type Tenant } from '@/lib/nav'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient, type ShortageDetail } from '@/lib/api-client'
+import { toast } from '@/lib/toast-context'
+import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 interface CartItem {
   product: Product
@@ -57,24 +64,23 @@ interface OrderDeskViewProps {
 }
 
 export function OrderDeskView({ tenant }: OrderDeskViewProps) {
+  const queryClient = useQueryClient()
+
   // --------------------------------------------------------------------------
   // State
   // --------------------------------------------------------------------------
-  const [products] = useState<Product[]>(seedProducts)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<'all' | CategoryKey>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [page, setPage] = useState(1)
   const pageSize = 8
 
   // Cart & POS state
-  const [cart, setCart] = useState<CartItem[]>([
-    { product: seedProducts[0], quantity: 50 }, // Hex Bolts M6
-    { product: seedProducts[3], quantity: 2 },  // Cordless Impact Driver
-  ])
+  const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer>(customers[0])
   const [discountPercent, setDiscountPercent] = useState<number>(0)
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([])
   const [showHeldModal, setShowHeldModal] = useState(false)
+  const [shortageConflict, setShortageConflict] = useState<ShortageDetail[] | null>(null)
   const [receiptOrder, setReceiptOrder] = useState<{
     orderNumber: string
     timestamp: string
@@ -86,35 +92,79 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
     total: number
   } | null>(null)
 
-  // Barcode scanner simulation feedback
+  // Focus trap refs
+  const receiptModalRef = useRef<HTMLDivElement>(null)
+  const conflictModalRef = useRef<HTMLDivElement>(null)
+  const heldModalRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(Boolean(receiptOrder), receiptModalRef, () => setReceiptOrder(null))
+  useFocusTrap(Boolean(shortageConflict), conflictModalRef, () => setShortageConflict(null))
+  useFocusTrap(showHeldModal, heldModalRef, () => setShowHeldModal(false))
+
+  // Barcode scanner feedback
   const [scannedFeedback, setScannedFeedback] = useState<string | null>(null)
 
   // --------------------------------------------------------------------------
-  // Filtered Catalog
+  // Live Products Query (TanStack Query)
   // --------------------------------------------------------------------------
-  const filteredProducts = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim()
-    return products.filter((p) => {
-      const matchesSearch =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q)
-      const matchesCat = selectedCategory === 'all' || p.category === selectedCategory
-      return matchesSearch && matchesCat
-    })
-  }, [products, searchQuery, selectedCategory])
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams()
+    params.set('status', 'IN_STOCK')
+    params.set('limit', '50')
+    if (searchQuery.trim()) params.set('search', searchQuery.trim())
+    if (selectedCategory !== 'all') params.set('category', selectedCategory)
+    return params.toString()
+  }, [searchQuery, selectedCategory])
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize))
+  const {
+    data: catalogResponse,
+    isLoading: catalogLoading,
+    isError: catalogError,
+    refetch: refetchCatalog,
+  } = useQuery({
+    queryKey: ['pos-products', tenant?.id, searchQuery, selectedCategory],
+    queryFn: async () => {
+      return await apiClient.get(`products?${queryParams}`)
+    },
+  })
+
+  // Live Categories Query
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories', tenant?.id],
+    queryFn: async () => {
+      const res = await apiClient.get('categories')
+      return res.data || []
+    },
+  })
+
+  // Normalized Live Products
+  const products: Product[] = useMemo(() => {
+    if (!catalogResponse?.data) return []
+    return catalogResponse.data.map(normalizeProduct)
+  }, [catalogResponse])
+
+  // Pagination on POS Grid
+  const totalPages = Math.max(1, Math.ceil(products.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const pagedProducts = useMemo(() => {
     const start = (currentPage - 1) * pageSize
-    return filteredProducts.slice(start, start + pageSize)
-  }, [filteredProducts, currentPage, pageSize])
+    return products.slice(start, start + pageSize)
+  }, [products, currentPage, pageSize])
 
   // Reset page when search or category changes
   useEffect(() => {
     setPage(1)
   }, [searchQuery, selectedCategory])
+
+  // Auto-populate cart with 1 initial sample item if cart is empty on first load
+  useEffect(() => {
+    if (products.length > 0 && cart.length === 0) {
+      const available = products.find((p) => p.stock > 0)
+      if (available) {
+        setCart([{ product: available, quantity: 1 }])
+      }
+    }
+  }, [products])
 
   // --------------------------------------------------------------------------
   // Cart Calculations
@@ -128,7 +178,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
   }, [subtotal, discountPercent])
 
   const taxableAmount = Math.max(0, subtotal - discountAmount)
-  const taxAmount = taxableAmount * TAX_RATE
+  const taxAmount = Math.round(taxableAmount * TAX_RATE * 100) / 100
   const finalTotal = taxableAmount + taxAmount
 
   // --------------------------------------------------------------------------
@@ -138,6 +188,10 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id)
       if (existing) {
+        if (existing.quantity >= product.stock) {
+          toast.warning(`Maximum available inventory reached for ${product.sku} (${product.stock} units).`)
+          return prev
+        }
         return prev.map((item) =>
           item.product.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
@@ -146,6 +200,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
       }
       return [...prev, { product, quantity: 1 }]
     })
+    toast.info(`Added ${product.name} to cart.`)
   }
 
   const updateQuantity = (productId: string, delta: number) => {
@@ -154,6 +209,10 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
         .map((item) => {
           if (item.product.id === productId) {
             const newQty = item.quantity + delta
+            if (delta > 0 && newQty > item.product.stock) {
+              toast.warning(`Cannot exceed available warehouse stock (${item.product.stock} units).`)
+              return item
+            }
             return newQty > 0 ? { ...item, quantity: newQty } : null
           }
           return item
@@ -174,18 +233,110 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
   // Barcode Scanner Simulation
   // --------------------------------------------------------------------------
   const handleSimulateScan = () => {
-    // Pick a random product from inventory
+    if (products.length === 0) return
     const randomIndex = Math.floor(Math.random() * products.length)
     const scannedProduct = products[randomIndex]
     addToCart(scannedProduct)
 
-    setScannedFeedback(`Scanned ${scannedProduct.sku} - ${scannedProduct.name}`)
-    setTimeout(() => setScannedFeedback(null), 2500)
+    setScannedFeedback(`Scanned barcode: ${scannedProduct.sku} (${scannedProduct.name})`)
+    setTimeout(() => setScannedFeedback(null), 3000)
   }
 
   // --------------------------------------------------------------------------
-  // Hold & Complete Order Handlers
+  // Atomic Concurrency-Safe Checkout Mutation
   // --------------------------------------------------------------------------
+  const checkoutMutation = useMutation({
+    mutationFn: async (orderPayload: {
+      customerName: string
+      customerEmail?: string
+      items: { productId: string; quantity: number }[]
+      notes?: string
+    }) => {
+      return await apiClient.post('orders', orderPayload)
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['pos-products'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+
+      const orderData = res.data?.order
+      toast.success(`Transaction authorized! Order #${orderData?.orderNumber || 'CONFIRMED'}`)
+
+      setReceiptOrder({
+        orderNumber: orderData?.orderNumber || `ORD-${Date.now().toString().slice(-6)}`,
+        timestamp: orderData?.createdAt
+          ? new Date(orderData.createdAt).toLocaleString()
+          : new Date().toLocaleString(),
+        customer: selectedCustomer,
+        items: [...cart],
+        subtotal: Number(orderData?.subtotal || subtotal),
+        discountAmount: discountAmount,
+        taxAmount: Number(orderData?.taxAmount || taxAmount),
+        total: Number(orderData?.totalAmount || finalTotal),
+      })
+      clearCart()
+    },
+    onError: (err: any) => {
+      // 409 Conflict: parse itemized shortages
+      if (err.status === 409) {
+        const shortages: ShortageDetail[] = err.details || []
+        setShortageConflict(shortages)
+
+        // Automatically synchronize the cart with current DB stock levels without clearing unconflicted items
+        setCart((prevCart) => {
+          return prevCart
+            .map((item) => {
+              const shortage = shortages.find((s) => s.productId === item.product.id)
+              if (shortage) {
+                if (shortage.availableStock <= 0) {
+                  return null // depleted to 0: remove
+                }
+                return {
+                  ...item,
+                  quantity: shortage.availableStock, // clamp to available
+                  product: {
+                    ...item.product,
+                    stock: shortage.availableStock,
+                    stockQuantity: shortage.availableStock,
+                  },
+                }
+              }
+              return item
+            })
+            .filter((item): item is CartItem => item !== null)
+        })
+
+        queryClient.invalidateQueries({ queryKey: ['pos-products'] })
+        queryClient.invalidateQueries({ queryKey: ['products'] })
+
+        toast.warning(
+          'Inventory conflict detected: Cart automatically reconciled to live warehouse stock.',
+          'Stock Shortage Reconciled'
+        )
+      } else {
+        toast.error(err.message || 'Failed to complete order checkout', 'Transaction Failed')
+      }
+    },
+  })
+
+  const handleProcessPayment = () => {
+    if (cart.length === 0) {
+      toast.warning('Cart is empty. Add items before processing payment.')
+      return
+    }
+
+    const payload = {
+      customerName: selectedCustomer.name,
+      customerEmail: selectedCustomer.email || 'customer@acme-retail.com',
+      items: cart.map((item) => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+      })),
+      notes: `POS Station Checkout · Customer: ${selectedCustomer.name} (${selectedCustomer.type})`,
+    }
+
+    checkoutMutation.mutate(payload)
+  }
+
   const handleHoldOrder = () => {
     if (cart.length === 0) return
 
@@ -199,6 +350,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
 
     setHeldOrders((prev) => [newHeld, ...prev])
     clearCart()
+    toast.info(`Order placed on hold (${newHeld.id}).`)
   }
 
   const handleResumeHeldOrder = (held: HeldOrder) => {
@@ -206,24 +358,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
     setSelectedCustomer(held.customer)
     setHeldOrders((prev) => prev.filter((h) => h.id !== held.id))
     setShowHeldModal(false)
-  }
-
-  const handleCompleteOrder = () => {
-    if (cart.length === 0) return
-
-    const completed = {
-      orderNumber: `ORD-POS-${Date.now().toString().slice(-6)}`,
-      timestamp: new Date().toLocaleString(),
-      customer: selectedCustomer,
-      items: [...cart],
-      subtotal,
-      discountAmount,
-      taxAmount,
-      total: finalTotal,
-    }
-
-    setReceiptOrder(completed)
-    clearCart()
+    toast.success(`Resumed held order ${held.id}.`)
   }
 
   return (
@@ -238,28 +373,41 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                 POS Checkout Station
               </span>
               <span className="text-xs text-muted-foreground font-mono">
-                Station #04 · {tenant?.name ?? 'Acme Corp'}
+                Station #04 · {tenant?.name ?? 'Acme Retail'}
               </span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Order Desk &amp; Quick POS
             </h1>
             <p className="text-xs text-muted-foreground max-w-xl">
-              High-speed B2B terminal with live inventory locking, customer account pricing, and instantaneous receipt generation.
+              High-speed B2B terminal with live row-locking, atomic checkout, and automatic 409 conflict inventory reconciliation.
             </p>
           </div>
 
-          {/* Held Orders Quick Access Button */}
-          {heldOrders.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowHeldModal(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-warning/40 bg-warning/15 text-warning hover:bg-warning/25 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          {/* Header Action Buttons */}
+          <div className="flex items-center gap-2">
+            {heldOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowHeldModal(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-warning/40 bg-warning/15 text-warning hover:bg-warning/25 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <PauseCircle className="size-4" aria-hidden="true" />
+                <span>{heldOrders.length} Held</span>
+              </button>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchCatalog()}
+              className="gap-1.5 text-xs border-border"
+              title="Refresh inventory catalog"
             >
-              <PauseCircle className="size-4" aria-hidden="true" />
-              <span>{heldOrders.length} Held {heldOrders.length === 1 ? 'Order' : 'Orders'}</span>
-            </button>
-          )}
+              <RefreshCw className="size-3.5" />
+              <span>Refresh</span>
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -268,7 +416,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
         <div
           role="status"
           aria-live="polite"
-          className="flex items-center gap-2 rounded-xl border border-success/40 bg-success/15 px-4 py-2.5 text-xs font-semibold text-success shadow-md animate-in fade-in slide-in-from-top-2"
+          className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/30 px-4 py-2.5 text-xs font-semibold text-emerald-300 shadow-md animate-in fade-in slide-in-from-top-2"
         >
           <Barcode className="size-4" aria-hidden="true" />
           <span>{scannedFeedback}</span>
@@ -279,171 +427,159 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
           Split-Screen Layout: Catalog Grid (Left) + Order Drawer (Right)
           ===================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* -----------------------------------------------------------------
-            LEFT PANEL: Product Catalog Grid (7 Cols on desktop)
-            ----------------------------------------------------------------- */}
-        <div className="lg:col-span-7 flex flex-col gap-4">
-          {/* Search & Barcode Scan Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 bg-card/80 p-3 rounded-xl border border-border">
-            <div className="relative flex-1">
-              <label htmlFor="pos-search" className="sr-only">
-                Search product catalog by name or SKU
+        {/* ===================================================================
+            LEFT PANEL: Live Inventory Catalog Selection (Col span 7/12)
+            =================================================================== */}
+        <section
+          aria-label="Available Catalog Items"
+          className="lg:col-span-7 flex flex-col gap-4"
+        >
+          {/* Search, Barcode & Category Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 p-3.5 rounded-2xl border border-border bg-card shadow-sm">
+            <div className="relative flex-1 w-full">
+              <label htmlFor="pos-catalog-search" className="sr-only">
+                Search POS catalog
               </label>
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
-                id="pos-search"
+                id="pos-catalog-search"
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Scan or search name / SKU…"
-                className="w-full h-9 pl-9 pr-4 rounded-lg border border-input bg-background text-xs text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring outline-none transition-colors"
+                placeholder="Search products or SKU..."
+                className="w-full h-9 pl-9 pr-4 rounded-xl border border-input bg-background text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
 
-            {/* Accessible Barcode Scanner Simulation Button */}
-            <button
-              type="button"
-              onClick={handleSimulateScan}
-              title="Simulate Barcode Scanner"
-              className="inline-flex items-center justify-center size-9 shrink-0 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Barcode className="size-5" aria-hidden="true" />
-              <span className="sr-only">Scan barcode (simulation)</span>
-            </button>
-          </div>
-
-          {/* Category Filter Pills */}
-          <nav aria-label="POS Catalog Categories" className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('all')}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                selectedCategory === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-card border border-border text-muted-foreground hover:bg-accent hover:text-foreground'
-              )}
-            >
-              All Items ({products.length})
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setSelectedCategory(c.key)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  selectedCategory === c.key
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'bg-card border border-border text-muted-foreground hover:bg-accent hover:text-foreground'
-                )}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                aria-label="Filter catalog by category"
+                className="h-9 px-2.5 rounded-xl border border-input bg-background text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring w-full sm:w-auto"
               >
-                {c.label}
-              </button>
-            ))}
-          </nav>
+                <option value="all">All In-Stock Categories</option>
+                {(categoriesData || fallbackCategories).map((c: any) => (
+                  <option key={c.id || c.key} value={c.id || c.key}>
+                    {c.name || c.label}
+                  </option>
+                ))}
+              </select>
 
-          {/* Product Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {pagedProducts.map((product) => {
-              const isOut = product.stock <= 0
-              const isLow = product.stock > 0 && product.stock <= product.reorderPoint
-
-              return (
-                <div
-                  key={product.id}
-                  className="flex flex-col justify-between rounded-xl border border-border bg-card p-3.5 shadow-xs transition-all hover:border-primary/40 hover:shadow-md"
-                >
-                  <div className="flex gap-3">
-                    {/* Product Photo */}
-                    <div className="relative size-16 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                      <Image
-                        src={categoryImage[product.category]}
-                        alt={product.name}
-                        fill
-                        sizes="64px"
-                        className="object-cover"
-                      />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-mono text-[11px] font-semibold text-muted-foreground truncate">
-                          {product.sku}
-                        </span>
-                        <span className="inline-flex items-center rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                          {categoryLabel[product.category]}
-                        </span>
-                      </div>
-
-                      <h3 className="text-xs font-semibold text-foreground line-clamp-1 mt-0.5">
-                        {product.name}
-                      </h3>
-
-                      <div className="flex items-baseline justify-between mt-2">
-                        <span className="text-sm font-bold text-foreground font-mono">
-                          {usd(product.price)}
-                        </span>
-                        <span
-                          className={cn(
-                            'text-[10px] font-medium',
-                            isOut
-                              ? 'text-danger'
-                              : isLow
-                              ? 'text-warning'
-                              : 'text-muted-foreground'
-                          )}
-                        >
-                          {isOut ? 'Out of stock' : `${product.stock} available`}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 pt-2.5 border-t border-border/60">
-                    <Button
-                      size="sm"
-                      disabled={isOut}
-                      onClick={() => addToCart(product)}
-                      className="w-full gap-1.5 text-xs font-semibold"
-                      aria-label={`Add ${product.name} to order`}
-                    >
-                      <Plus className="size-3.5" aria-hidden="true" />
-                      Add to Order
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-
-            {pagedProducts.length === 0 && (
-              <div className="col-span-full py-12 text-center text-muted-foreground">
-                <p className="text-sm font-semibold text-foreground">No catalog items matched.</p>
-                <p className="text-xs mt-1">Try modifying your query or category filters.</p>
-              </div>
-            )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSimulateScan}
+                className="gap-1.5 text-xs shrink-0 font-semibold border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                title="Simulate hardware barcode laser scan"
+              >
+                <Barcode className="size-4 text-primary" aria-hidden="true" />
+                <span className="hidden sm:inline">Scan SKU</span>
+              </Button>
+            </div>
           </div>
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-border pt-3 px-1 text-xs text-muted-foreground">
-              <p>
-                Showing Page <span className="font-semibold text-foreground">{currentPage}</span> of{' '}
-                <span className="font-semibold text-foreground">{totalPages}</span>
+          {/* Catalog Grid Cards */}
+          {catalogLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <div
+                  key={`skeleton-card-${idx}`}
+                  className="rounded-2xl border border-border bg-card p-3.5 flex flex-col gap-2 animate-pulse"
+                >
+                  <div className="h-24 w-full rounded-xl bg-muted/50" />
+                  <div className="h-3 w-16 rounded bg-muted/50" />
+                  <div className="h-4 w-full rounded bg-muted/50" />
+                  <div className="h-4 w-12 rounded bg-muted/50 mt-auto" />
+                </div>
+              ))}
+            </div>
+          ) : pagedProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-border bg-card">
+              <ShoppingBag className="size-8 text-muted-foreground opacity-50 mb-2" />
+              <p className="text-sm font-semibold text-foreground">No in-stock products found</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Try refining your search keyword or clearing the category filter.
               </p>
-              <div className="flex items-center gap-1.5">
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {pagedProducts.map((p) => {
+                const inCart = cart.find((item) => item.product.id === p.id)
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => addToCart(p)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        addToCart(p)
+                      }
+                    }}
+                    className={cn(
+                      'group relative flex flex-col justify-between p-3.5 rounded-2xl border bg-card text-left transition-all duration-150 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:border-primary/50 hover:shadow-md',
+                      inCart ? 'border-primary/50 bg-primary/5' : 'border-border'
+                    )}
+                  >
+                    {/* Top image and badge */}
+                    <div>
+                      <div className="relative h-24 w-full rounded-xl overflow-hidden bg-muted/40 border border-border/60 mb-2.5 flex items-center justify-center">
+                        <Image
+                          src={categoryImage[p.category] || '/products/electrical.png'}
+                          alt=""
+                          width={80}
+                          height={80}
+                          className="size-16 object-contain group-hover:scale-105 transition-transform"
+                        />
+                        {inCart && (
+                          <span className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-xs">
+                            {inCart.quantity}
+                          </span>
+                        )}
+                      </div>
+
+                      <span className="font-mono text-[10px] font-bold text-primary uppercase block">
+                        {p.sku}
+                      </span>
+                      <h4 className="text-xs font-semibold text-foreground line-clamp-2 leading-snug mt-0.5">
+                        {p.name}
+                      </h4>
+                    </div>
+
+                    {/* Bottom Price & Available Stock indicator */}
+                    <div className="mt-3 pt-2 border-t border-border/60 flex items-baseline justify-between">
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        {usd(p.price)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-medium">
+                        {p.stock} in stock
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Catalog Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-2 pt-1 text-xs text-muted-foreground">
+              <span>
+                Page {currentPage} of {totalPages} ({products.length} in-stock items)
+              </span>
+              <div className="flex items-center gap-1">
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={currentPage === 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   className="size-8 p-0"
+                  aria-label="Previous catalog page"
                 >
                   <ChevronLeft className="size-4" />
-                  <span className="sr-only">Previous page</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -451,80 +587,91 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                   disabled={currentPage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   className="size-8 p-0"
+                  aria-label="Next catalog page"
                 >
                   <ChevronRight className="size-4" />
-                  <span className="sr-only">Next page</span>
                 </Button>
               </div>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* -----------------------------------------------------------------
-            RIGHT PANEL: Order Summary Drawer (5 Cols on desktop)
-            ----------------------------------------------------------------- */}
-        <aside
-          aria-label="Current Order Summary"
-          className="lg:col-span-5 sticky top-20 rounded-2xl border border-border/80 wood-surface p-5 shadow-xl flex flex-col gap-4 text-foreground"
+        {/* ===================================================================
+            RIGHT PANEL: Cart & Order Drawer (Col span 5/12)
+            =================================================================== */}
+        <section
+          aria-label="Order Cart & Checkout Panel"
+          className="lg:col-span-5 flex flex-col rounded-2xl border border-border bg-card shadow-sm p-4 sm:p-5 gap-4 sticky top-[72px]"
         >
-          {/* Header: Customer Selector */}
-          <div className="flex flex-col gap-2 pb-3 border-b border-white/10">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[oklch(0.82_0.02_78)] uppercase tracking-wider flex items-center gap-1.5">
-                <User className="size-3.5 text-primary" aria-hidden="true" />
-                Select Customer Account
-              </span>
-              <span className="text-[11px] text-muted-foreground font-mono">
-                {cart.length} {cart.length === 1 ? 'Line Item' : 'Line Items'}
-              </span>
+          {/* Customer Selection & Account Pricing */}
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div className="flex items-center gap-2">
+              <User className="size-4 text-primary" aria-hidden="true" />
+              <label htmlFor="customer-select" className="text-xs font-bold text-foreground">
+                Customer:
+              </label>
+              <select
+                id="customer-select"
+                value={selectedCustomer.id}
+                onChange={(e) => {
+                  const c = customers.find((cust) => cust.id === e.target.value)
+                  if (c) setSelectedCustomer(c)
+                }}
+                className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.type})
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <label htmlFor="pos-customer-select" className="sr-only">
-              Customer Account Selector
-            </label>
-            <select
-              id="pos-customer-select"
-              value={selectedCustomer.id}
-              onChange={(e) => {
-                const found = customers.find((c) => c.id === e.target.value)
-                if (found) setSelectedCustomer(found)
-              }}
-              className="w-full h-9 px-3 rounded-lg border border-white/20 bg-black/40 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {customers.map((c) => (
-                <option key={c.id} value={c.id} className="bg-slate-900 text-slate-100">
-                  {c.name} ({c.type})
-                </option>
-              ))}
-            </select>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-border bg-muted/60 text-muted-foreground">
+              {cart.reduce((s, i) => s + i.quantity, 0)} Items
+            </span>
           </div>
 
-          {/* Cart List (Scrollable) */}
-          <div className="flex flex-col gap-2.5 max-h-[320px] overflow-y-auto pr-1">
+          {/* Active Cart Line Items */}
+          <div
+            className="flex flex-col gap-2.5 max-h-[360px] overflow-y-auto pr-1"
+            tabIndex={0}
+            role="region"
+            aria-label="Active order cart items list"
+          >
             {cart.length === 0 ? (
-              <div className="py-10 text-center text-muted-foreground flex flex-col items-center gap-2">
-                <ShoppingBag className="size-8 opacity-40" aria-hidden="true" />
-                <p className="text-xs font-medium text-foreground">Order basket is currently empty.</p>
-                <p className="text-[11px]">Click 'Add to Order' on any product card on the left.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                <ShoppingBag className="size-8 opacity-40 mb-2" />
+                <p className="text-xs font-semibold text-foreground">Cart is currently empty</p>
+                <p className="text-[11px] mt-0.5">Click catalog items on the left or scan a barcode to begin.</p>
               </div>
             ) : (
               cart.map((item) => (
                 <div
                   key={item.product.id}
-                  className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-white/10 bg-black/30 backdrop-blur-xs text-xs"
+                  className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border/80 bg-background/50 hover:bg-background transition-colors text-xs"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground truncate">{item.product.name}</p>
-                    <p className="text-[11px] text-muted-foreground font-mono">{usd(item.product.price)} each</p>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono font-bold text-primary text-[11px]">
+                        {item.product.sku}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        ({usd(item.product.price)} ea)
+                      </span>
+                    </div>
+                    <p className="font-semibold text-foreground truncate mt-0.5">
+                      {item.product.name}
+                    </p>
                   </div>
 
-                  {/* Accessible Quantity Selector */}
-                  <div className="flex items-center gap-1 shrink-0 bg-black/50 rounded-lg p-0.5 border border-white/15">
+                  {/* Quantity Stepper */}
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.product.id, -1)}
+                      className="size-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Decrease quantity of ${item.product.name}`}
-                      className="size-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
                     >
                       <Minus className="size-3" />
                     </button>
@@ -534,23 +681,16 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.product.id, 1)}
+                      className="size-6 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Increase quantity of ${item.product.name}`}
-                      className="size-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
                     >
                       <Plus className="size-3" />
                     </button>
-                  </div>
-
-                  {/* Item Subtotal & Delete */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono font-bold text-foreground tabular-nums">
-                      {usd(item.product.price * item.quantity)}
-                    </span>
                     <button
                       type="button"
                       onClick={() => removeFromCart(item.product.id)}
-                      aria-label={`Remove ${item.product.name} from order`}
-                      className="p-1 rounded text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors"
+                      className="size-6 rounded-lg text-muted-foreground hover:text-danger hover:bg-danger/10 transition-colors ml-1 focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Remove ${item.product.name} from cart`}
                     >
                       <Trash2 className="size-3.5" />
                     </button>
@@ -560,83 +700,186 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
             )}
           </div>
 
-          {/* Financial Totals Breakdown */}
-          <div className="flex flex-col gap-2 pt-3 border-t border-white/10 text-xs text-[oklch(0.82_0.02_78)]">
-            <div className="flex items-center justify-between">
+          {/* Summary & Calculations Box */}
+          <div className="flex flex-col gap-2 pt-3 border-t border-border text-xs">
+            <div className="flex justify-between text-muted-foreground">
               <span>Subtotal</span>
               <span className="font-mono font-semibold text-foreground">{usd(subtotal)}</span>
             </div>
 
-            {/* Discount Input */}
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="pos-discount" className="whitespace-nowrap">
-                Discount applied (%):
-              </label>
-              <div className="flex items-center gap-1.5 w-24">
-                <input
-                  id="pos-discount"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={discountPercent || ''}
-                  onChange={(e) => setDiscountPercent(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
-                  placeholder="0"
-                  className="w-full h-7 px-2 text-right rounded border border-white/20 bg-black/40 text-xs font-mono text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-                <span>%</span>
+            <div className="flex items-center justify-between text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="discount-input">Discount:</label>
+                <select
+                  id="discount-input"
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(Number(e.target.value))}
+                  className="h-6 rounded border border-input bg-background px-1 text-[11px] outline-none"
+                >
+                  <option value={0}>0% (Standard)</option>
+                  <option value={5}>5% (Preferred)</option>
+                  <option value={10}>10% (Wholesale)</option>
+                  <option value={15}>15% (VIP Contract)</option>
+                </select>
               </div>
+              {discountPercent > 0 && (
+                <span className="font-mono text-emerald-400 font-semibold">
+                  -{usd(discountAmount)}
+                </span>
+              )}
             </div>
 
-            {discountPercent > 0 && (
-              <div className="flex items-center justify-between text-success">
-                <span>Discount ({discountPercent}%)</span>
-                <span className="font-mono font-semibold">-{usd(discountAmount)}</span>
-              </div>
-            )}
-
-            {/* Tax Calculation (automatic 8.875%) */}
-            <div className="flex items-center justify-between">
-              <span>Sales Tax (8.875% auto)</span>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Estimated Tax (8.875% auto)</span>
               <span className="font-mono font-semibold text-foreground">{usd(taxAmount)}</span>
             </div>
 
-            {/* Final Grand Total in USD */}
-            <div className="flex items-baseline justify-between pt-2 border-t border-white/15 text-sm">
-              <span className="font-bold text-foreground text-base">Grand Total (USD)</span>
-              <span className="font-mono font-extrabold text-2xl text-primary tabular-nums tracking-tight">
-                {usd(finalTotal)}
-              </span>
+            <div className="flex justify-between items-baseline pt-2 border-t border-border text-sm font-bold">
+              <span className="text-foreground">Total Due</span>
+              <span className="font-mono text-xl text-primary">{usd(finalTotal)}</span>
             </div>
           </div>
 
-          {/* Action Footer */}
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          {/* Action Buttons: Hold Order & Complete Payment */}
+          <div className="flex flex-col gap-2 pt-2">
             <Button
               type="button"
-              variant="outline"
-              disabled={cart.length === 0}
-              onClick={handleHoldOrder}
-              className="w-full gap-1.5 text-xs font-semibold border-white/20 hover:bg-white/10 text-foreground"
+              size="lg"
+              disabled={cart.length === 0 || checkoutMutation.isPending}
+              onClick={handleProcessPayment}
+              className="w-full gap-2 font-bold text-sm shadow-md"
             >
-              <PauseCircle className="size-4" aria-hidden="true" />
-              Hold Order
+              {checkoutMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>Locking &amp; Authorizing...</span>
+                </>
+              ) : (
+                <>
+                  <CreditCard className="size-4" />
+                  <span>Process Payment ({usd(finalTotal)})</span>
+                </>
+              )}
             </Button>
 
-            <Button
-              type="button"
-              disabled={cart.length === 0}
-              onClick={handleCompleteOrder}
-              className="w-full gap-1.5 text-xs font-bold shadow-lg"
-            >
-              <CreditCard className="size-4" aria-hidden="true" />
-              Complete Order
-            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={cart.length === 0 || checkoutMutation.isPending}
+                onClick={handleHoldOrder}
+                className="gap-1.5 text-xs text-muted-foreground border-border hover:text-foreground"
+              >
+                <PauseCircle className="size-3.5" />
+                <span>Hold Order</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={cart.length === 0 || checkoutMutation.isPending}
+                onClick={clearCart}
+                className="gap-1.5 text-xs text-danger/80 border-danger/30 hover:bg-danger/10 hover:text-danger"
+              >
+                <Trash2 className="size-3.5" />
+                <span>Clear Cart</span>
+              </Button>
+            </div>
           </div>
-        </aside>
+        </section>
       </div>
 
       {/* =====================================================================
-          Held Orders Modal
+          409 CONFLICT SHORTAGE MODAL (The Interview Showcase)
+          ===================================================================== */}
+      {shortageConflict && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="shortage-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
+        >
+          <div
+            ref={conflictModalRef}
+            className="w-full max-w-lg rounded-2xl border border-amber-500/50 bg-[#1e1711] text-amber-100 p-6 shadow-2xl flex flex-col gap-5"
+          >
+            <div className="flex items-start gap-3.5 border-b border-amber-500/30 pb-4">
+              <div className="size-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0">
+                <AlertTriangle className="size-6" aria-hidden="true" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 id="shortage-title" className="text-base font-bold text-amber-200">
+                  Inventory Conflict (HTTP 409 Shortage)
+                </h3>
+                <p className="text-xs text-amber-300/80 mt-0.5">
+                  Another cashier or online order depleted inventory concurrently. The PostgreSQL row lock prevented overselling.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShortageConflict(null)}
+                className="text-amber-400 hover:text-amber-200 p-1"
+              >
+                <X className="size-5" />
+                <span className="sr-only">Close conflict notice</span>
+              </button>
+            </div>
+
+            {/* Shortage Itemized Table */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-amber-300">
+                Reconciled Items (Adjusted in Cart):
+              </p>
+              <div className="rounded-xl border border-amber-500/20 bg-black/40 overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-amber-950/40 text-amber-400/80 border-b border-amber-500/20 text-[11px] uppercase font-mono">
+                    <tr>
+                      <th className="px-3 py-2">Item</th>
+                      <th className="px-3 py-2 text-center">Requested</th>
+                      <th className="px-3 py-2 text-center">Available</th>
+                      <th className="px-3 py-2 text-right">Adjustment</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-500/15">
+                    {shortageConflict.map((s) => (
+                      <tr key={s.productId} className="text-amber-100">
+                        <td className="px-3 py-2">
+                          <span className="font-mono font-bold text-amber-400">{s.sku}</span>
+                          <span className="block text-[10px] text-amber-200/70 truncate">{s.name}</span>
+                        </td>
+                        <td className="px-3 py-2 text-center font-mono">{s.requestedQuantity}</td>
+                        <td className="px-3 py-2 text-center font-mono font-bold text-amber-300">
+                          {s.availableStock}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold text-rose-400">
+                          {s.availableStock === 0
+                            ? 'Removed'
+                            : `Clamped to ${s.availableStock}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-amber-500/30">
+              <Button
+                type="button"
+                onClick={() => setShortageConflict(null)}
+                className="bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs"
+              >
+                Accept Reconciled Cart &amp; Continue
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          HELD ORDERS MODAL
           ===================================================================== */}
       {showHeldModal && (
         <div
@@ -645,7 +888,10 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
           aria-labelledby="held-orders-title"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-5 shadow-2xl flex flex-col gap-4">
+          <div
+            ref={heldModalRef}
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl flex flex-col gap-4"
+          >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
                 <PauseCircle className="size-5 text-warning" />
@@ -689,7 +935,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
       )}
 
       {/* =====================================================================
-          Full-Screen Receipt Confirmation Modal Dialog State
+          Full-Screen Receipt Confirmation Modal Dialog with Focus Trap
           ===================================================================== */}
       {receiptOrder && (
         <div
@@ -698,7 +944,10 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
           aria-labelledby="receipt-title"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in"
         >
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/20 bg-zinc-950 text-slate-100 p-6 sm:p-8 shadow-2xl flex flex-col gap-6">
+          <div
+            ref={receiptModalRef}
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/20 bg-zinc-950 text-slate-100 p-6 sm:p-8 shadow-2xl flex flex-col gap-6"
+          >
             {/* Header Badge & Brand */}
             <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
               <div className="flex items-center gap-3">
@@ -707,7 +956,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                 </div>
                 <div>
                   <h2 id="receipt-title" className="text-xl font-extrabold tracking-tight text-white">
-                    Order Payment Confirmed
+                    Order Authorized &amp; Persisted
                   </h2>
                   <p className="text-xs text-zinc-400">
                     StockPulse Multi-Tenant Transaction Receipt · Status: <span className="text-emerald-400 font-semibold">AUTHORIZED</span>
@@ -718,7 +967,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
               <button
                 type="button"
                 onClick={() => setReceiptOrder(null)}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="size-5" />
                 <span className="sr-only">Close receipt dialog</span>
@@ -733,15 +982,15 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
               </div>
               <div>
                 <span className="text-zinc-500 block">Organization</span>
-                <span className="font-semibold text-white">{tenant?.name ?? 'Acme Corp'}</span>
+                <span className="font-semibold text-white">{tenant?.name ?? 'Acme Retail'}</span>
               </div>
               <div>
                 <span className="text-zinc-500 block">Customer</span>
                 <span className="font-semibold text-white truncate block">{receiptOrder.customer.name}</span>
               </div>
               <div>
-                <span className="text-zinc-500 block">Payment Method</span>
-                <span className="font-semibold text-emerald-400">B2B Account (NET 30)</span>
+                <span className="text-zinc-500 block">Payment Status</span>
+                <span className="font-semibold text-emerald-400">PAID · B2B Account</span>
               </div>
             </div>
 
@@ -765,7 +1014,9 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                       </td>
                       <td className="px-3.5 py-2.5 text-center font-bold">{item.quantity}</td>
                       <td className="px-3.5 py-2.5 text-right text-zinc-400">{usd(item.product.price)}</td>
-                      <td className="px-3.5 py-2.5 text-right font-bold text-white">{usd(item.product.price * item.quantity)}</td>
+                      <td className="px-3.5 py-2.5 text-right font-bold text-white">
+                        {usd(item.product.price * item.quantity)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -780,7 +1031,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
               </div>
               {receiptOrder.discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-400 font-sans">
-                  <span>Discount</span>
+                  <span>Discount ({discountPercent}%)</span>
                   <span className="font-mono">-{usd(receiptOrder.discountAmount)}</span>
                 </div>
               )}
@@ -789,7 +1040,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                 <span className="font-mono text-white">{usd(receiptOrder.taxAmount)}</span>
               </div>
               <div className="flex justify-between items-baseline pt-2 border-t border-zinc-800 text-sm font-sans font-bold">
-                <span className="text-white text-base">Total Paid</span>
+                <span className="text-white text-base">Total Settled</span>
                 <span className="font-mono text-2xl text-emerald-400">{usd(receiptOrder.total)}</span>
               </div>
             </div>
@@ -811,11 +1062,11 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => alert(`Receipt ${receiptOrder.orderNumber} exported to PDF.`)}
+                  onClick={() => toast.success(`Receipt ${receiptOrder.orderNumber} exported.`)}
                   className="gap-1.5 text-xs text-zinc-200 border-zinc-700 hover:bg-zinc-800"
                 >
                   <Download className="size-4" />
-                  Download PDF
+                  Download
                 </Button>
               </div>
 
@@ -825,7 +1076,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                 className="w-full sm:w-auto gap-1.5 text-xs font-bold"
               >
                 <RotateCcw className="size-4" />
-                Start New Order
+                Start New Transaction
               </Button>
             </div>
           </div>

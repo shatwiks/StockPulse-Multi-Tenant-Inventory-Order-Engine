@@ -27,12 +27,12 @@ export type Tenant = {
   name: string
   plan: string
   region: string
+  slug?: string
 }
 
 export const tenants: Tenant[] = [
-  { id: 'acme', name: 'Acme Corp', plan: 'Enterprise', region: 'US-East' },
-  { id: 'globex', name: 'Globex Logistics', plan: 'Business', region: 'EU-West' },
-  { id: 'initech', name: 'Initech Supply Co.', plan: 'Business', region: 'US-West' },
+  { id: '8fca3ba6-54a5-4985-ac05-2887f056f798', name: 'Acme Retail', plan: 'Enterprise', region: 'US-East', slug: 'acme-retail' },
+  { id: 'd4b8e3a2-11c9-482a-9f5e-71649281a0b3', name: 'Summit Supplies', plan: 'Business', region: 'US-West', slug: 'summit-supplies' },
 ]
 
 export type AppNotification = {

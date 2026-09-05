@@ -8,6 +8,8 @@
     "server"
   ],
   "scripts": {
+    "dev": "concurrently -n \"server,frontend\" -c \"blue,green\" \"npm run dev --prefix server\" \"npm run dev --prefix frontend\"",
+    "build": "npm run build --prefix server && npm run build --prefix frontend",
     "dev:server": "npm run dev --prefix server",
     "dev:frontend": "npm run dev --prefix frontend",
     "build:server": "npm run build --prefix server",
@@ -17,6 +19,10 @@
     "db:push": "npm run db:push --prefix server",
     "test:constraints": "npm run test:constraints --prefix server",
     "test:checkout": "npm run test:checkout --prefix server",
-    "test:phase2": "npm run test:phase2 --prefix server"
+    "test:phase2": "npm run test:phase2 --prefix server",
+    "test:phase3": "npm run test:phase3 --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

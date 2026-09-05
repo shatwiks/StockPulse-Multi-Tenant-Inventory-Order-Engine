@@ -19,6 +19,8 @@ import {
   Layers,
   X,
   AlertCircle,
+  RotateCcw,
+  Loader2,
 } from 'lucide-react'
 import Image from 'next/image'
 import { useEffect, useMemo, useState, useId } from 'react'
@@ -27,11 +29,11 @@ import { AddProductModal } from './add-product-modal'
 import { Menu, MenuItem, MenuSeparator } from './menu'
 import { StatusBadge } from './status-badge'
 import {
-  categories,
+  categories as fallbackCategories,
   categoryImage,
   categoryLabel,
   compactNumber,
-  products as seedProducts,
+  normalizeProduct,
   statusOf,
   usd,
   type CategoryKey,
@@ -40,6 +42,10 @@ import {
 } from '@/lib/inventory-data'
 import { type Tenant } from '@/lib/nav'
 import { cn } from '@/lib/utils'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient } from '@/lib/api-client'
+import { toast } from '@/lib/toast-context'
+import { useAuth } from '@/lib/auth-context'
 
 type SortKey = 'sku' | 'price' | 'stock'
 type SortDir = 'asc' | 'desc'
@@ -55,10 +61,11 @@ interface InventoryViewProps {
 }
 
 export function InventoryView({ tenant }: InventoryViewProps) {
-  const [items, setItems] = useState<Product[]>(seedProducts)
+  const queryClient = useQueryClient()
+  const { role } = useAuth()
   const [rawSearch, setRawSearch] = useState('')
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<'all' | CategoryKey>('all')
+  const [category, setCategory] = useState<string>('all')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [sortKey, setSortKey] = useState<SortKey>('sku')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -78,24 +85,96 @@ export function InventoryView({ tenant }: InventoryViewProps) {
     return () => clearTimeout(id)
   }, [rawSearch])
 
-  // Any filter/sort change returns to page 1
+  // Any filter change resets page
   useEffect(() => {
     setPage(1)
-  }, [search, category, status, sortKey, sortDir])
+  }, [search, category, status])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const rows = items.filter((p) => {
-      const matchesQuery =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q)
-      const matchesCategory = category === 'all' || p.category === category
-      const matchesStatus = status === 'all' || statusOf(p) === status
-      return matchesQuery && matchesCategory && matchesStatus
-    })
+  // Query live categories
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories', tenant?.id],
+    queryFn: async () => {
+      const res = await apiClient.get('categories')
+      return res.data || []
+    },
+  })
 
-    const sorted = [...rows].sort((a, b) => {
+  // Construct query string for products API
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('limit', String(PAGE_SIZE))
+    if (search.trim()) params.set('search', search.trim())
+    if (category !== 'all') params.set('category', category)
+    if (status !== 'all') {
+      const statusMap: Record<StockStatus, string> = {
+        'in-stock': 'IN_STOCK',
+        'low-stock': 'LOW_STOCK',
+        'out-of-stock': 'OUT_OF_STOCK',
+      }
+      params.set('status', statusMap[status] || status)
+    }
+    return params.toString()
+  }, [page, search, category, status])
+
+  // Hook useQuery for live products
+  const {
+    data: productsResponse,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ['products', tenant?.id, page, search, category, status],
+    queryFn: async () => {
+      return await apiClient.get(`products?${queryParams}`)
+    },
+  })
+
+  // Stock Adjustment Mutation
+  const adjustStockMutation = useMutation({
+    mutationFn: async ({ id, delta }: { id: string; delta: number }) => {
+      return await apiClient.patch(`products/${id}/stock`, {
+        adjustmentQuantity: delta,
+      })
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      toast.success(
+        `Physical inventory updated for ${res.data?.sku || 'SKU'}. New verified count: ${res.data?.newStock}`,
+        'Stock Adjusted'
+      )
+      setAdjustProduct(null)
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to adjust stock', 'Adjustment Error')
+    },
+  })
+
+  // Delete Product Mutation
+  const deleteProductMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiClient.delete(`products/${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      toast.success('Product deleted from inventory.', 'Catalog Updated')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to delete product', 'Delete Error')
+    },
+  })
+
+  // Normalize items from response
+  const rawItems: Product[] = useMemo(() => {
+    if (!productsResponse?.data) return []
+    return productsResponse.data.map(normalizeProduct)
+  }, [productsResponse])
+
+  // Client-side sort on the active page
+  const pageRows = useMemo(() => {
+    const sorted = [...rawItems].sort((a, b) => {
       let cmp = 0
       if (sortKey === 'sku') cmp = a.sku.localeCompare(b.sku)
       else if (sortKey === 'price') cmp = a.price - b.price
@@ -103,17 +182,15 @@ export function InventoryView({ tenant }: InventoryViewProps) {
       return sortDir === 'asc' ? cmp : -cmp
     })
     return sorted
-  }, [items, search, category, status, sortKey, sortDir])
+  }, [rawItems, sortKey, sortDir])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const meta = productsResponse?.meta || { total: rawItems.length, page: 1, totalPages: 1 }
+  const totalItems = meta.total || rawItems.length
+  const totalPages = Math.max(1, meta.totalPages || 1)
   const currentPage = Math.min(page, totalPages)
-  const pageRows = filtered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  )
 
-  const lowCount = items.filter((p) => statusOf(p) === 'low-stock').length
-  const outCount = items.filter((p) => statusOf(p) === 'out-of-stock').length
+  const lowCount = rawItems.filter((p) => statusOf(p) === 'low-stock').length
+  const outCount = rawItems.filter((p) => statusOf(p) === 'out-of-stock').length
 
   const pageIds = pageRows.map((p) => p.id)
   const allOnPageSelected =
@@ -151,27 +228,13 @@ export function InventoryView({ tenant }: InventoryViewProps) {
     })
   }
 
-  function deleteProduct(id: string) {
-    setItems((prev) => prev.filter((p) => p.id !== id))
-    setSelected((prev) => {
-      const next = new Set(prev)
-      next.delete(id)
-      return next
-    })
-  }
-
-  function deleteSelected() {
-    setItems((prev) => prev.filter((p) => !selected.has(p.id)))
-    setSelected(new Set())
-  }
-
   // Real CSV Export Handler
   function handleExportCSV() {
     const headers = ['SKU', 'Name', 'Category', 'Unit Price (USD)', 'Current Stock', 'Reorder Point', 'Status']
-    const rows = filtered.map((p) => [
+    const rows = pageRows.map((p) => [
       `"${p.sku}"`,
       `"${p.name.replace(/"/g, '""')}"`,
-      `"${categoryLabel[p.category]}"`,
+      `"${categoryLabel[p.category] || p.categoryName || p.category}"`,
       p.price.toFixed(2),
       p.stock,
       p.reorderPoint,
@@ -182,7 +245,10 @@ export function InventoryView({ tenant }: InventoryViewProps) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `StockCatalog_${(tenant?.name ?? 'Acme_Corp').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute(
+      'download',
+      `StockCatalog_${(tenant?.name ?? 'Acme_Retail').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
+    )
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -204,18 +270,23 @@ export function InventoryView({ tenant }: InventoryViewProps) {
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-2.5 py-0.5 text-xs font-mono text-[oklch(0.88_0.02_78)]">
                 <Building2 className="size-3.5 text-primary" aria-hidden="true" />
-                Org: {tenant?.name ?? 'Acme Corp'}
+                Org: {tenant?.name ?? 'Acme Retail'}
               </span>
               <span className="inline-flex items-center rounded-md border border-white/15 bg-black/40 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                4,521 Items
+                {isLoading ? 'Loading...' : `${compactNumber(totalItems)} Items`}
               </span>
+              {isFetching && !isLoading && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-amber-300 font-mono">
+                  <Loader2 className="size-3 animate-spin" /> Syncing...
+                </span>
+              )}
             </div>
 
             <h1 className="text-2xl font-bold tracking-tight text-balance text-white">
               Stock Catalog &amp; Inventory Ledger
             </h1>
             <p className="max-w-md text-xs text-pretty text-[oklch(0.82_0.02_78)]">
-              Multi-tenant B2B inventory management ledger. Filter, sort, reconcile cycle counts, and trigger replenishment before stockouts.
+              Multi-tenant B2B inventory management ledger powered by TanStack Query and PostgreSQL row-level locks.
             </p>
           </div>
 
@@ -224,18 +295,18 @@ export function InventoryView({ tenant }: InventoryViewProps) {
             <dl className="grid grid-cols-3 gap-2.5 w-full sm:w-auto">
               <HeroStat
                 label="Total SKUs"
-                value="4,521"
+                value={isLoading ? '...' : compactNumber(totalItems)}
                 icon={<Package className="size-3.5" aria-hidden="true" />}
               />
               <HeroStat
                 label="Low Stock"
-                value={String(lowCount)}
+                value={isLoading ? '...' : String(lowCount)}
                 tone="warning"
                 icon={<TriangleAlert className="size-3.5" aria-hidden="true" />}
               />
               <HeroStat
                 label="Stockout"
-                value={String(outCount)}
+                value={isLoading ? '...' : String(outCount)}
                 tone="danger"
                 icon={<PackageX className="size-3.5" aria-hidden="true" />}
               />
@@ -253,7 +324,16 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                 <span>CSV Export</span>
               </Button>
               <Button
-                onClick={() => setAddOpen(true)}
+                onClick={() => {
+                  if (role === 'CASHIER') {
+                    toast.error(
+                      'Access Denied: CASHIER role cannot add products. Requires ADMIN or MANAGER.',
+                      'Insufficient Permissions'
+                    )
+                    return
+                  }
+                  setAddOpen(true)
+                }}
                 className="gap-1.5 text-xs font-bold shadow-lg w-full sm:w-auto shrink-0"
                 aria-haspopup="dialog"
                 aria-expanded={addOpen}
@@ -288,7 +368,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
               type="search"
               value={rawSearch}
               onChange={(e) => setRawSearch(e.target.value)}
-              placeholder="Search SKU or name (debounced)…"
+              placeholder="Search SKU or name (debounced 300ms)…"
               className={cn(controlClass, 'w-full pl-9 pr-8')}
             />
             {rawSearch && (
@@ -304,7 +384,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Category Filter Dropdown with Explicit Label */}
+            {/* Category Filter Dropdown */}
             <div className="flex items-center gap-1.5">
               <label htmlFor={catFilterId} className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
                 Category:
@@ -312,19 +392,19 @@ export function InventoryView({ tenant }: InventoryViewProps) {
               <select
                 id={catFilterId}
                 value={category}
-                onChange={(e) => setCategory(e.target.value as 'all' | CategoryKey)}
+                onChange={(e) => setCategory(e.target.value)}
                 className={controlClass}
               >
-                <option value="all">All categories ({items.length})</option>
-                {categories.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
+                <option value="all">All categories</option>
+                {(categoriesData || fallbackCategories).map((c: any) => (
+                  <option key={c.id || c.key} value={c.id || c.key}>
+                    {c.name || c.label}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Stock Status Filter Dropdown with Explicit Label */}
+            {/* Stock Status Filter Dropdown */}
             <div className="flex items-center gap-1.5">
               <label htmlFor={statusFilterId} className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
                 Status:
@@ -335,85 +415,76 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                 onChange={(e) => setStatus(e.target.value as StatusFilter)}
                 className={controlClass}
               >
-                <option value="all">All Statuses</option>
-                <option value="in-stock">In Stock (&gt; Reorder)</option>
-                <option value="low-stock">Low Stock (≤ Reorder)</option>
-                <option value="out-of-stock">Out of Stock (0)</option>
+                <option value="all">All stock statuses</option>
+                <option value="in-stock">In Stock</option>
+                <option value="low-stock">Low Stock</option>
+                <option value="out-of-stock">Out of Stock</option>
               </select>
             </div>
           </div>
         </div>
 
-        {/* Filter Summary Counter */}
-        <div className="text-xs text-muted-foreground font-medium hidden lg:block">
-          Showing <span className="font-semibold text-foreground">{filtered.length}</span> matching products
-        </div>
+        {/* Batch Selection Bar */}
+        {selected.size > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs text-primary font-semibold"
+          >
+            <span>{selected.size} selected</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelected(new Set())}
+              className="h-6 text-[11px] px-2"
+            >
+              Clear
+            </Button>
+          </div>
+        )}
       </section>
 
       {/* =====================================================================
-          3. Batch Selection Toolbar (when rows selected)
+          3. Error State with Accessible Retry Button
           ===================================================================== */}
-      {selected.size > 0 && (
+      {isError && (
         <div
-          role="region"
-          aria-label="Batch Actions"
-          className="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-medium animate-in fade-in"
+          role="alert"
+          className="flex flex-col items-center justify-center p-10 text-center rounded-2xl border border-destructive/40 bg-destructive/10"
         >
-          <div className="flex items-center gap-2">
-            <span className="size-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-[11px]">
-              {selected.size}
-            </span>
-            <span className="font-semibold text-foreground">items selected for batch action</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelected(new Set())}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Clear Selection
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="gap-1.5 text-xs font-semibold"
-              onClick={deleteSelected}
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              Delete Selected ({selected.size})
-            </Button>
-          </div>
+          <AlertCircle className="size-8 text-destructive mb-2" aria-hidden="true" />
+          <h3 className="text-base font-bold text-foreground">Failed to load inventory data</h3>
+          <p className="text-xs text-muted-foreground max-w-md mt-1">
+            {(error as any)?.message || 'An unexpected error occurred while communicating with the backend API.'}
+          </p>
+          <Button
+            onClick={() => refetch()}
+            className="mt-4 gap-2 font-semibold"
+            variant="default"
+          >
+            <RotateCcw className="size-4" aria-hidden="true" />
+            <span>Retry Connection</span>
+          </Button>
         </div>
       )}
 
       {/* =====================================================================
-          4. Accessible Data-Dense Table (<table scope="col">)
+          4. Accessible Data Table with WCAG 2.1 AA Compliant Contrast
           ===================================================================== */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-xs">
-            <caption className="sr-only">
-              Stock Catalog Inventory Data Table: {filtered.length} products found.
-            </caption>
-
-            {/* Accessible Table Header with scope="col" */}
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-left font-bold text-muted-foreground uppercase tracking-wider text-[11px]">
-                {/* Batch Checkbox */}
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+              <tr>
                 <th scope="col" className="w-10 px-4 py-3 text-center">
-                  <span className="sr-only">Select all items on this page</span>
                   <input
                     type="checkbox"
                     checked={allOnPageSelected}
                     onChange={togglePage}
                     aria-label="Select all products on current page"
-                    className="size-4 rounded border-input accent-primary cursor-pointer"
+                    className="size-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </th>
-
-                {/* SKU with Sort Icon */}
                 <SortHeader
                   label="SKU"
                   active={sortKey === 'sku'}
@@ -421,18 +492,12 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                   ariaSort={ariaSort('sku')}
                   onClick={() => toggleSort('sku')}
                 />
-
-                {/* Product Name with 40x40 Thumbnail */}
-                <th scope="col" className="px-4 py-3 min-w-[220px]">
+                <th scope="col" className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">
                   Product Name
                 </th>
-
-                {/* Category Badge */}
-                <th scope="col" className="px-4 py-3">
+                <th scope="col" className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">
                   Category
                 </th>
-
-                {/* Unit Price ($ USD) */}
                 <SortHeader
                   label="Unit Price"
                   active={sortKey === 'price'}
@@ -441,8 +506,6 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                   onClick={() => toggleSort('price')}
                   align="right"
                 />
-
-                {/* Current Stock (Numerical + Progress Bar) */}
                 <SortHeader
                   label="Current Stock"
                   active={sortKey === 'stock'}
@@ -450,22 +513,57 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                   ariaSort={ariaSort('stock')}
                   onClick={() => toggleSort('stock')}
                 />
-
-                {/* Status Badge */}
-                <th scope="col" className="px-4 py-3">
+                <th scope="col" className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">
                   Status
                 </th>
-
-                {/* Actions Dropdown */}
-                <th scope="col" className="w-12 px-4 py-3 text-center">
-                  <span className="sr-only">Actions</span>
+                <th scope="col" className="w-16 px-4 py-3 text-center font-bold text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Actions
                 </th>
               </tr>
             </thead>
 
-            {/* Table Body */}
             <tbody className="divide-y divide-border/60">
-              {pageRows.map((product) => {
+              {/* Skeleton Loading State to Prevent Layout Shift */}
+              {isLoading &&
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="px-4 py-3.5 text-center">
+                      <div className="size-4 rounded bg-muted/50 mx-auto" />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="h-4 w-20 rounded bg-muted/50" />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-lg bg-muted/50 shrink-0" />
+                        <div className="space-y-1.5 w-full max-w-xs">
+                          <div className="h-4 w-48 rounded bg-muted/50" />
+                          <div className="h-2.5 w-24 rounded bg-muted/30" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="h-5 w-24 rounded-md bg-muted/50" />
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="h-4 w-14 rounded bg-muted/50 ml-auto" />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="space-y-1.5 w-32">
+                        <div className="h-3 w-16 rounded bg-muted/50" />
+                        <div className="h-1.5 w-full rounded bg-muted/40" />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="h-5 w-20 rounded-full bg-muted/50" />
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <div className="size-6 rounded bg-muted/40 mx-auto" />
+                    </td>
+                  </tr>
+                ))}
+
+              {!isLoading && !isError && pageRows.map((product) => {
                 const st = statusOf(product)
                 const isSelected = selected.has(product.id)
 
@@ -477,29 +575,28 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                       isSelected && 'bg-primary/5'
                     )}
                   >
-                    {/* Checkbox */}
+                    {/* Checkbox for batch select */}
                     <td className="px-4 py-3 text-center">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleRow(product.id)}
-                        aria-label={`Select product ${product.name}`}
-                        className="size-4 rounded border-input accent-primary cursor-pointer"
+                        aria-label={`Select ${product.name}`}
+                        className="size-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
                       />
                     </td>
 
-                    {/* SKU */}
-                    <td className="px-4 py-3 font-mono text-[11px] font-semibold text-foreground whitespace-nowrap">
+                    {/* SKU Column */}
+                    <td className="px-4 py-3 font-mono font-bold text-primary whitespace-nowrap">
                       {product.sku}
                     </td>
 
-                    {/* Product Name with 40x40 Thumbnail Image */}
+                    {/* Product Name with Thumbnail */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        {/* Exactly 40x40 thumbnail image (size-10 = 2.5rem = 40px) */}
                         <div className="relative size-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                           <Image
-                            src={categoryImage[product.category]}
+                            src={categoryImage[product.category] || '/products/electrical.png'}
                             alt=""
                             width={40}
                             height={40}
@@ -507,11 +604,11 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-foreground truncate">
+                          <p className="font-semibold text-foreground truncate max-w-xs">
                             {product.name}
                           </p>
                           <span className="text-[10px] text-muted-foreground font-mono">
-                            ID: {product.id}
+                            ID: {product.id.slice(0, 8)}…
                           </span>
                         </div>
                       </div>
@@ -520,7 +617,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                     {/* Category Badge */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="inline-flex items-center rounded-md border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
-                        {categoryLabel[product.category]}
+                        {categoryLabel[product.category] || product.categoryName || product.category}
                       </span>
                     </td>
 
@@ -534,7 +631,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                       <StockCell product={product} status={st} />
                     </td>
 
-                    {/* Status Badge (WCAG AA Compliant High Contrast Semantic Badges) */}
+                    {/* Status Badge */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <StatusBadge status={st} />
                     </td>
@@ -543,15 +640,33 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       <RowActions
                         productName={product.name}
-                        onAdjustStock={() => setAdjustProduct(product)}
-                        onDelete={() => deleteProduct(product.id)}
+                        onAdjustStock={() => {
+                          if (role === 'CASHIER') {
+                            toast.error(
+                              'Access Denied: CASHIER role cannot adjust inventory. Requires ADMIN or MANAGER.',
+                              'Insufficient Permissions'
+                            )
+                            return
+                          }
+                          setAdjustProduct(product)
+                        }}
+                        onDelete={() => {
+                          if (role === 'CASHIER') {
+                            toast.error(
+                              'Access Denied: CASHIER role cannot delete products.',
+                              'Insufficient Permissions'
+                            )
+                            return
+                          }
+                          deleteProductMutation.mutate(product.id)
+                        }}
                       />
                     </td>
                   </tr>
                 )
               })}
 
-              {pageRows.length === 0 && (
+              {!isLoading && !isError && pageRows.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -577,20 +692,20 @@ export function InventoryView({ tenant }: InventoryViewProps) {
           <p>
             Showing{' '}
             <span className="font-semibold text-foreground">
-              {filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}
+              {totalItems === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}
             </span>{' '}
             to{' '}
             <span className="font-semibold text-foreground">
-              {Math.min(currentPage * PAGE_SIZE, filtered.length)}
+              {Math.min(currentPage * PAGE_SIZE, totalItems)}
             </span>{' '}
-            of <span className="font-semibold text-foreground">{filtered.length}</span> entries
+            of <span className="font-semibold text-foreground">{totalItems}</span> entries
           </p>
 
           <nav className="flex items-center gap-1" aria-label="Catalog Pagination">
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage === 1}
+              disabled={currentPage === 1 || isLoading}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               aria-label="Previous page"
               className="size-8 p-0"
@@ -618,7 +733,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage >= totalPages}
+              disabled={currentPage >= totalPages || isLoading}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               aria-label="Next page"
               className="size-8 p-0"
@@ -633,21 +748,16 @@ export function InventoryView({ tenant }: InventoryViewProps) {
       <AddProductModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onCreate={(product) => setItems((prev) => [product, ...prev])}
       />
 
       {/* Adjust Stock Quick Modal */}
       {adjustProduct && (
         <AdjustStockDialog
           product={adjustProduct}
+          isPending={adjustStockMutation.isPending}
           onClose={() => setAdjustProduct(null)}
-          onSave={(newStock) => {
-            setItems((prev) =>
-              prev.map((item) =>
-                item.id === adjustProduct.id ? { ...item, stock: newStock } : item
-              )
-            )
-            setAdjustProduct(null)
+          onSave={(delta) => {
+            adjustStockMutation.mutate({ id: adjustProduct.id, delta })
           }}
         />
       )}
@@ -718,12 +828,12 @@ function SortHeader({
         {!active && (
           <ArrowUpDown className="size-3.5 opacity-50" aria-hidden="true" />
         )}
-        {active &&
-          (dir === 'asc' ? (
-            <ArrowUp className="size-3.5 text-primary" aria-hidden="true" />
-          ) : (
-            <ArrowDown className="size-3.5 text-primary" aria-hidden="true" />
-          ))}
+        {active && dir === 'asc' && (
+          <ArrowUp className="size-3.5 text-primary" aria-hidden="true" />
+        )}
+        {active && dir === 'desc' && (
+          <ArrowDown className="size-3.5 text-primary" aria-hidden="true" />
+        )}
       </button>
     </th>
   )
@@ -736,41 +846,44 @@ function StockCell({
   product: Product
   status: StockStatus
 }) {
-  const ceiling = Math.max(product.reorderPoint * 2, product.stock, 1)
-  const pct = Math.min(100, Math.round((product.stock / ceiling) * 100))
-
-  const isOut = status === 'out-of-stock'
-  const isLow = status === 'low-stock'
-
-  const barColor = isOut
-    ? 'bg-danger'
-    : isLow
-    ? 'bg-warning'
-    : 'bg-success'
+  const stock = product.stock
+  const reorder = product.reorderPoint
+  const ratio = reorder > 0 ? Math.min(100, Math.round((stock / (reorder * 2)) * 100)) : 100
 
   return (
-    <div className="flex w-32 flex-col gap-1">
-      <div className="flex items-baseline justify-between gap-1 text-[11px]">
-        <span className={cn('font-bold font-mono', isOut ? 'text-danger' : isLow ? 'text-warning' : 'text-foreground')}>
-          {compactNumber(product.stock)} units
+    <div className="flex flex-col gap-1 w-36">
+      <div className="flex items-center justify-between text-xs font-mono">
+        <span
+          className={cn(
+            'font-bold tabular-nums',
+            status === 'out-of-stock' && 'text-danger font-semibold',
+            status === 'low-stock' && 'text-warning font-semibold',
+            status === 'in-stock' && 'text-foreground'
+          )}
+        >
+          {compactNumber(stock)} units
         </span>
         <span className="text-[10px] text-muted-foreground">
-          min {compactNumber(product.reorderPoint)}
+          Reorder: {compactNumber(reorder)}
         </span>
       </div>
 
-      {/* Accessible Progress Bar */}
       <div
-        className="h-1.5 overflow-hidden rounded-full bg-muted/80"
         role="progressbar"
-        aria-valuenow={product.stock}
+        aria-valuenow={stock}
         aria-valuemin={0}
-        aria-valuemax={ceiling}
-        aria-label={`${product.name} stock level: ${product.stock} units`}
+        aria-valuemax={reorder * 2}
+        aria-label={`Stock level for ${product.name}`}
+        className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
       >
         <div
-          className={cn('h-full rounded-full transition-all duration-300', barColor)}
-          style={{ width: `${Math.max(pct, isOut ? 0 : 8)}%` }}
+          className={cn(
+            'h-full transition-all duration-300',
+            status === 'out-of-stock' && 'bg-danger w-0',
+            status === 'low-stock' && 'bg-warning',
+            status === 'in-stock' && 'bg-success'
+          )}
+          style={{ width: `${status === 'out-of-stock' ? 0 : ratio}%` }}
         />
       </div>
     </div>
@@ -788,17 +901,16 @@ function RowActions({
 }) {
   return (
     <Menu
-      label="Row actions"
       align="end"
-      menuClassName="w-44"
+      label={`Actions for ${productName}`}
       trigger={(triggerProps) => (
         <button
           type="button"
           {...triggerProps}
-          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex size-8 items-center justify-center rounded-lg border border-border/80 bg-background text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Actions menu for ${productName}`}
         >
           <MoreHorizontal className="size-4" aria-hidden="true" />
-          <span className="sr-only">Open actions menu for {productName}</span>
         </button>
       )}
     >
@@ -807,26 +919,17 @@ function RowActions({
           <MenuItem
             onClick={() => {
               close()
-              alert(`Edit specifications for ${productName}`)
-            }}
-          >
-            <Pencil className="size-3.5" aria-hidden="true" />
-            <span>Edit Product</span>
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              close()
               onAdjustStock()
             }}
           >
-            <SlidersHorizontal className="size-3.5" aria-hidden="true" />
-            <span>Adjust Stock</span>
+            <SlidersHorizontal className="size-3.5 text-primary" aria-hidden="true" />
+            <span>Adjust Physical Stock</span>
           </MenuItem>
           <MenuSeparator />
           <MenuItem
             onClick={() => {
-              onDelete()
               close()
+              onDelete()
             }}
             className="text-danger data-[highlighted]:bg-danger/10 data-[highlighted]:text-danger"
           >
@@ -841,23 +944,26 @@ function RowActions({
 
 function AdjustStockDialog({
   product,
+  isPending,
   onClose,
   onSave,
 }: {
   product: Product
+  isPending?: boolean
   onClose: () => void
-  onSave: (newStock: number) => void
+  onSave: (delta: number) => void
 }) {
-  const [qty, setQty] = useState<number>(product.stock)
+  const [newCount, setNewCount] = useState<number>(product.stock)
   const [error, setError] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (qty < 0) {
-      setError('Stock cannot be negative (CHECK constraint stock_quantity >= 0).')
+    if (newCount < 0) {
+      setError('Stock cannot be negative (Database CHECK constraint stock_quantity >= 0).')
       return
     }
-    onSave(qty)
+    const delta = newCount - product.stock
+    onSave(delta)
   }
 
   return (
@@ -875,7 +981,12 @@ function AdjustStockDialog({
               Adjust Physical Stock
             </h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className="p-1 rounded text-muted-foreground hover:text-foreground"
+          >
             <X className="size-4" />
             <span className="sr-only">Close adjust stock dialog</span>
           </button>
@@ -885,20 +996,24 @@ function AdjustStockDialog({
           <div className="p-2.5 rounded-lg border border-border bg-muted/40 text-xs">
             <p className="font-mono font-semibold text-primary">{product.sku}</p>
             <p className="font-medium text-foreground truncate">{product.name}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Current recorded balance: <span className="font-bold text-foreground">{product.stock} units</span>
+            </p>
           </div>
 
           <div>
             <label htmlFor="adjust-input" className="block text-xs font-semibold text-muted-foreground mb-1">
-              New Verified Stock Count
+              New Verified Count
             </label>
             <input
               id="adjust-input"
               type="number"
               min="0"
               required
-              value={qty}
+              disabled={isPending}
+              value={newCount}
               onChange={(e) => {
-                setQty(parseInt(e.target.value, 10) || 0)
+                setNewCount(parseInt(e.target.value, 10) || 0)
                 setError('')
               }}
               className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm font-bold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -912,11 +1027,12 @@ function AdjustStockDialog({
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button type="submit" size="sm">
-              Save Count
+            <Button type="submit" size="sm" disabled={isPending} className="gap-1.5">
+              {isPending && <Loader2 className="size-3.5 animate-spin" />}
+              <span>{isPending ? 'Saving...' : 'Save Count'}</span>
             </Button>
           </div>
         </form>

@@ -269,7 +269,7 @@ npm run db:seed
 
 ---
 
-### Step 5: Verify Security Constraints, RBAC & Concurrency Locking
+### Step 5: Verify Security Constraints, RBAC & End-to-End Flows
 
 Execute the automated test suites:
 
@@ -277,23 +277,38 @@ Execute the automated test suites:
 # Test 1: Verify multi-tenant isolation and CHECK constraints
 npm run test:constraints
 
-# Test 2: Basic Concurrency stress test (Row-locking & 409 Conflict rollback)
+# Test 2: Concurrency stress test (Row-locking & 409 Conflict rollback)
 npm run test:checkout
 
-# Test 3: Comprehensive Phase 2 Verification Suite (Cross-tenant, RBAC, 10x Concurrent Checkouts)
+# Test 3: Phase 2 Security & RBAC Suite (Cross-tenant, Least Privilege, 10x Concurrent Checkouts)
 npm run test:phase2
+
+# Test 4: Phase 3 End-to-End Suite (TanStack Query, Product CRUD, Stock Adj, Atomic POS Checkout)
+npm run test:phase3
 ```
 
 ---
 
-### Step 6: Start the Applications
+### Step 6: Unified Local Development (`npm run dev`)
+
+Run both the Express API and Next.js Frontend concurrently with a single command:
 
 ```bash
-# Terminal 1: Backend API (Express + TypeScript on http://localhost:3001)
-npm run dev:server
+# Starts Express API (:3001) and Next.js Frontend (:3000) concurrently
+npm run dev
+```
 
-# Terminal 2: Frontend Dashboard (Next.js 16 on http://localhost:3000)
-npm run dev:frontend
+Or build both workspaces for production with zero TypeScript errors:
+
+```bash
+# Compiles both server (tsc) and frontend (next build)
+npm run build
+```
+
+Individual workspace commands remain available:
+```bash
+npm run dev:server     # Backend only (http://localhost:3001)
+npm run dev:frontend   # Frontend only (http://localhost:3000)
 ```
 
 ---
@@ -634,7 +649,57 @@ sequenceDiagram
 
 ---
 
-## 8. Seed Accounts
+## 8. Frontend State Architecture & TanStack Query Integration
+
+StockPulse decouples UI rendering from server state using `@tanstack/react-query`, resilient HTTP interceptors, and accessible modal primitives:
+
+### 8.1 Transactional Checkout & 409 Shortage Reconciliation Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cashier as Cashier Terminal (POS UI)
+    participant Query as TanStack Query Cache
+    participant API as api-client.ts (Fetch Client)
+    participant Server as Express Engine (:3001)
+    participant DB as PostgreSQL 16 (Row Locks)
+
+    Cashier->>API: Click "Process Payment" (Cart: Item A x2)
+    API->>Server: POST /api/v1/orders with JWT Bearer
+    Server->>DB: BEGIN TRANSACTION<br/>SELECT ... FOR UPDATE (ORDER BY id ASC)
+    
+    alt Concurrent Checkout Detected Shortage
+        Note over DB: Item A available stock is 0 (sold moments ago)
+        Server->>DB: ROLLBACK TRANSACTION
+        Server-->>API: HTTP 409 Conflict (itemized shortage: { available: 0, requested: 2 })
+        API-->>Cashier: Intercept 409 -> Trigger Shortage Conflict Modal
+        Note over Cashier: Cart automatically clamps or purges depleted items.<br/>Non-conflicted items remain intact!
+        Query->>Server: Invalidate ['pos-products'] -> Re-fetch live inventory
+    else Inventory Sufficient
+        Server->>DB: Deduct inventory (UPDATE products)<br/>INSERT INTO orders & order_items<br/>COMMIT TRANSACTION
+        Server-->>API: HTTP 201 Created (Order Receipt)
+        API-->>Cashier: Clear Cart -> Open Accessible Receipt Modal (Focus Trapped)
+        Query->>Server: Invalidate ['products'] & ['pos-products']
+    end
+```
+
+### 8.2 Architectural Highlights
+1. **Zero-Drift Reactivity**:
+   - `useQuery(['products', { page, search, category, status }])` keeps the Stock Catalog synchronized with live server counts without redundant full-page reloads.
+   - Debounced search inputs (300ms) prevent network saturation.
+   - Skeletons prevent Cumulative Layout Shift (CLS) during network fetches.
+2. **Resilient Interceptors (`api-client.ts`)**:
+   - `credentials: 'include'` enforces secure HTTP-only cookie delivery.
+   - `401 Unauthorized` automatically terminates stale sessions and triggers re-authentication.
+   - `403 Forbidden` automatically extracts server policy rejections and triggers user-friendly Toast alerts without throwing unhandled exceptions.
+3. **WCAG 2.1 AA Accessibility Standards**:
+   - **Keyboard Focus Management**: Receipt confirmation modals and conflict dialogs implement full focus traps via `useFocusTrap` (`Tab`, `Shift+Tab`, and `Esc` to dismiss).
+   - **Accessible Live Announcements**: Stock changes, cart operations, and shortages announce asynchronously via `role="alert"` / `aria-live="polite"`.
+   - **Visible Focus Rings**: All interactive controls feature `focus-visible:ring-2 focus-visible:ring-ring`.
+
+---
+
+## 9. Seed Accounts
 
 All accounts are pre-seeded with bcrypt-hashed passwords (10 salt rounds): **`StockPulse2026!`**.
 
