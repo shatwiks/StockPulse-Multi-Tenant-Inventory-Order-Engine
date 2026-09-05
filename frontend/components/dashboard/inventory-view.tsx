@@ -230,7 +230,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
 
   // Real CSV Export Handler
   function handleExportCSV() {
-    const headers = ['SKU', 'Name', 'Category', 'Unit Price (USD)', 'Current Stock', 'Reorder Point', 'Status']
+    const headers = ['SKU', 'Name', 'Category', 'Unit Price (INR)', 'Current Stock', 'Reorder Point', 'Status']
     const rows = pageRows.map((p) => [
       `"${p.sku}"`,
       `"${p.name.replace(/"/g, '""')}"`,
@@ -247,7 +247,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
     link.href = url
     link.setAttribute(
       'download',
-      `StockCatalog_${(tenant?.name ?? 'Acme_Retail').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
+      `StockCatalog_${(tenant?.name ?? 'Bharat_Retail').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
     )
     document.body.appendChild(link)
     link.click()
@@ -270,7 +270,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-2.5 py-0.5 text-xs font-mono text-[oklch(0.88_0.02_78)]">
                 <Building2 className="size-3.5 text-primary" aria-hidden="true" />
-                Org: {tenant?.name ?? 'Acme Retail'}
+                Org: {tenant?.name ?? 'Bharat Logistics & Retail'}
               </span>
               <span className="inline-flex items-center rounded-md border border-white/15 bg-black/40 px-2.5 py-0.5 text-xs font-semibold text-primary">
                 {isLoading ? 'Loading...' : `${compactNumber(totalItems)} Items`}
@@ -621,7 +621,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                       </span>
                     </td>
 
-                    {/* Unit Price ($ USD) */}
+                    {/* Unit Price (INR) */}
                     <td className="px-4 py-3 text-right font-mono font-bold text-foreground tabular-nums whitespace-nowrap">
                       {usd(product.price)}
                     </td>

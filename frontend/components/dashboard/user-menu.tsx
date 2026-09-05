@@ -67,7 +67,7 @@ export function UserMenu() {
                 {displayName}
               </span>
               <span className="truncate text-[11px] text-muted-foreground font-mono">
-                {user?.email || 'admin@acme-retail.com'}
+                {user?.email || 'admin@bharat-retail.in'}
               </span>
             </div>
           </div>

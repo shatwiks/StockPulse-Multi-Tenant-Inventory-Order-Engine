@@ -8,7 +8,14 @@ const defaultPasswordHash = bcrypt.hashSync(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS
 
 async function cleanExistingData() {
   console.log('🧹 Cleaning existing test organizations data (if any)...');
-  const testSlugs = ['acme-retail', 'summit-supplies', 'aeroshield-dynamics', 'biovanguard-diagnostics'];
+  const testSlugs = [
+    'bharat-retail',
+    'deccan-supplies',
+    'acme-retail',
+    'summit-supplies',
+    'aeroshield-dynamics',
+    'biovanguard-diagnostics',
+  ];
 
   const existingOrgs = await prisma.organization.findMany({
     where: { slug: { in: testSlugs } },
@@ -24,16 +31,16 @@ async function cleanExistingData() {
   }
 }
 
-async function seedAcmeRetail() {
-  console.log('\n🏬 [Tenant 1] Seeding Acme Retail...');
+async function seedBharatRetail() {
+  console.log('\n🏬 [Tenant 1] Seeding Bharat Logistics & Retail...');
 
   return await prisma.$transaction(async (tx) => {
     // 1. Create Organization
     const org = await tx.organization.create({
       data: {
-        name: 'Acme Retail',
-        slug: 'acme-retail',
-        currency: 'USD',
+        name: 'Bharat Logistics & Retail',
+        slug: 'bharat-retail',
+        currency: 'INR',
         status: OrganizationStatus.ACTIVE,
       },
     });
@@ -43,9 +50,9 @@ async function seedAcmeRetail() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'admin@acme-retail.com',
-          firstName: 'Alice',
-          lastName: 'Morgan',
+          email: 'admin@bharat-retail.in',
+          firstName: 'Aarav',
+          lastName: 'Sharma',
           passwordHash: defaultPasswordHash,
           role: UserRole.ADMIN,
           isActive: true,
@@ -54,9 +61,9 @@ async function seedAcmeRetail() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'manager@acme-retail.com',
-          firstName: 'Bob',
-          lastName: 'Miller',
+          email: 'manager@bharat-retail.in',
+          firstName: 'Priya',
+          lastName: 'Patel',
           passwordHash: defaultPasswordHash,
           role: UserRole.MANAGER,
           isActive: true,
@@ -65,9 +72,9 @@ async function seedAcmeRetail() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'cashier@acme-retail.com',
-          firstName: 'Charlie',
-          lastName: 'Davis',
+          email: 'cashier@bharat-retail.in',
+          firstName: 'Rohan',
+          lastName: 'Verma',
           passwordHash: defaultPasswordHash,
           role: UserRole.CASHIER,
           isActive: true,
@@ -79,42 +86,42 @@ async function seedAcmeRetail() {
     const catElectronics = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Consumer Electronics',
-        slug: 'acme-electronics',
-        description: 'Audio, accessories, and portable electronics',
+        name: 'Enterprise Electronics & POS',
+        slug: 'bharat-electronics',
+        description: 'Commercial barcode readers, thermal POS printers, and charging hubs',
       },
     });
 
-    const catApparel = await tx.category.create({
+    const catLogistics = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Apparel & Uniforms',
-        slug: 'acme-apparel',
-        description: 'Retail and staff apparel',
+        name: 'Warehouse & Logistics Gear',
+        slug: 'bharat-logistics',
+        description: 'Safety footwear, ergonomic aprons, and reflective jackets',
       },
     });
 
     const catPantry = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Pantry & Beverages',
-        slug: 'acme-pantry',
-        description: 'Packaged beverages, coffee, and pantry essentials',
+        name: 'Corporate Pantry & Essentials',
+        slug: 'bharat-pantry',
+        description: 'Premium plantation coffee, tea blends, and refreshment packs',
       },
     });
 
-    // 4. Create Products with Varied Stock Levels
+    // 4. Create Products with Varied Stock Levels & INR Pricing
     const products = await Promise.all([
       // In Stock Items (stock > reorderLevel)
       tx.product.create({
         data: {
           organizationId: org.id,
-          categoryId: catElectronics.id,
-          sku: 'ACM-ELC-1001',
-          name: 'Wireless Noise-Cancelling Headphones',
-          description: 'High-fidelity Bluetooth 5.3 headphones with active noise cancellation',
-          unitPrice: 149.99,
-          costPrice: 85.0,
+          categoryId: catLogistics.id,
+          sku: 'BHT-SAF-1001',
+          name: 'Heavy-Duty Industrial Safety Boots',
+          description: 'Steel-toe puncture-resistant ISI certified industrial work boots with oil-resistant sole',
+          unitPrice: 2499.00,
+          costPrice: 1450.00,
           stockQuantity: 45, // IN STOCK
           reorderLevel: 10,
           status: ProductStatus.ACTIVE,
@@ -124,11 +131,11 @@ async function seedAcmeRetail() {
         data: {
           organizationId: org.id,
           categoryId: catElectronics.id,
-          sku: 'ACM-ELC-1002',
-          name: 'USB-C Fast Charging Hub (65W)',
-          description: 'Multi-port gallium nitride (GaN) fast wall charger with dual Type-C',
-          unitPrice: 39.95,
-          costPrice: 18.5,
+          sku: 'BHT-ELC-1002',
+          name: 'Fast-Charging Power Hub (65W)',
+          description: 'Multi-port GaN fast charging desktop hub with dual Type-C PD and surge protection',
+          unitPrice: 3999.00,
+          costPrice: 2100.00,
           stockQuantity: 80, // IN STOCK
           reorderLevel: 15,
           status: ProductStatus.ACTIVE,
@@ -138,12 +145,12 @@ async function seedAcmeRetail() {
       tx.product.create({
         data: {
           organizationId: org.id,
-          categoryId: catApparel.id,
-          sku: 'ACM-APP-2001',
-          name: 'Heavy-Duty Canvas Work Apron',
-          description: 'Water-resistant reinforced canvas apron with leather tool loops',
-          unitPrice: 28.5,
-          costPrice: 12.0,
+          categoryId: catLogistics.id,
+          sku: 'BHT-LOG-2001',
+          name: 'Ergonomic Warehouse Apron',
+          description: 'Waterproof heavy-duty canvas utility apron with reinforced tool pouches and adjustable straps',
+          unitPrice: 1499.00,
+          costPrice: 650.00,
           stockQuantity: 4, // LOW STOCK
           reorderLevel: 10,
           status: ProductStatus.ACTIVE,
@@ -153,11 +160,11 @@ async function seedAcmeRetail() {
         data: {
           organizationId: org.id,
           categoryId: catPantry.id,
-          sku: 'ACM-PAN-3001',
-          name: 'Artisan Dark Roast Espresso Beans (1kg)',
-          description: 'Single-origin fair trade whole bean coffee for commercial espresso machines',
-          unitPrice: 24.0,
-          costPrice: 11.25,
+          sku: 'BHT-PAN-3001',
+          name: 'Coorg Single-Estate Arabica Coffee Beans (1kg)',
+          description: 'Shade-grown artisanal whole bean roasted coffee for commercial espresso stations',
+          unitPrice: 1850.00,
+          costPrice: 920.00,
           stockQuantity: 5, // LOW STOCK
           reorderLevel: 12,
           status: ProductStatus.ACTIVE,
@@ -168,11 +175,11 @@ async function seedAcmeRetail() {
         data: {
           organizationId: org.id,
           categoryId: catElectronics.id,
-          sku: 'ACM-ELC-1003',
-          name: 'Thermal Receipt Printer (Bluetooth)',
-          description: 'High-speed 80mm POS receipt printer with drop-in paper loading',
-          unitPrice: 185.0,
-          costPrice: 110.0,
+          sku: 'BHT-ELC-1003',
+          name: 'Thermal Billing Printer',
+          description: 'High-speed 80mm wireless Bluetooth POS receipt & tax invoice printer with auto-cutter',
+          unitPrice: 12499.00,
+          costPrice: 7800.00,
           stockQuantity: 0, // OUT OF STOCK
           reorderLevel: 8,
           status: ProductStatus.OUT_OF_STOCK,
@@ -181,12 +188,12 @@ async function seedAcmeRetail() {
       tx.product.create({
         data: {
           organizationId: org.id,
-          categoryId: catApparel.id,
-          sku: 'ACM-APP-2002',
-          name: 'High-Visibility Safety Vest (Class 2)',
-          description: 'Fluorescent yellow mesh safety vest with 2-inch reflective stripes',
-          unitPrice: 16.5,
-          costPrice: 6.8,
+          categoryId: catLogistics.id,
+          sku: 'BHT-LOG-2002',
+          name: 'High-Visibility Safety Vest (Class 3)',
+          description: 'Fluorescent mesh reflective safety jacket with dual horizontal 3M micro-prismatic bands',
+          unitPrice: 799.00,
+          costPrice: 320.00,
           stockQuantity: 0, // OUT OF STOCK
           reorderLevel: 20,
           status: ProductStatus.OUT_OF_STOCK,
@@ -194,32 +201,32 @@ async function seedAcmeRetail() {
       }),
     ]);
 
-    // 5. Create Orders (COMPLETED, HELD, CANCELLED)
+    // 5. Create Orders (COMPLETED, HELD, CANCELLED) with 18% GST calculation
     const order1 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-ACM-2026-0001',
-        customerName: 'Cornerstone Hospitality LLC',
-        customerEmail: 'purchasing@cornerstone-hospitality.demo',
+        orderNumber: 'ORD-BHT-2026-0001',
+        customerName: 'Tata Consumer Products Logistics',
+        customerEmail: 'procurement@tataconsumer.demo',
         status: OrderStatus.COMPLETED,
-        totalAmount: 379.88,
-        taxAmount: 30.98,
-        notes: 'Delivered to main dining room store counter.',
+        totalAmount: 15335.28,
+        taxAmount: 2339.28,
+        notes: 'Delivered to Mumbai Central warehouse hub with GST invoice.',
         items: {
           create: [
             {
               organizationId: org.id,
               productId: products[0].id,
               quantity: 2,
-              unitPrice: 149.99,
-              totalPrice: 299.98,
+              unitPrice: 2499.00,
+              totalPrice: 4998.00,
             },
             {
               organizationId: org.id,
               productId: products[1].id,
               quantity: 2,
-              unitPrice: 39.95,
-              totalPrice: 79.9,
+              unitPrice: 3999.00,
+              totalPrice: 7998.00,
             },
           ],
         },
@@ -229,21 +236,21 @@ async function seedAcmeRetail() {
     const order2 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-ACM-2026-0002',
-        customerName: 'Metro Cafe & Roastery',
-        customerEmail: 'orders@metrocafe.demo',
+        orderNumber: 'ORD-BHT-2026-0002',
+        customerName: 'Reliance Retail Fulfilment Hub',
+        customerEmail: 'orders@relianceretail.demo',
         status: OrderStatus.HELD,
-        totalAmount: 72.0,
-        taxAmount: 5.87,
-        notes: 'Held at register counter pending customer return from warehouse aisle.',
+        totalAmount: 5306.46,
+        taxAmount: 809.46,
+        notes: 'Held at billing counter pending purchase order stamp approval.',
         items: {
           create: [
             {
               organizationId: org.id,
-              productId: products[3].id,
+              productId: products[2].id,
               quantity: 3,
-              unitPrice: 24.0,
-              totalPrice: 72.0,
+              unitPrice: 1499.00,
+              totalPrice: 4497.00,
             },
           ],
         },
@@ -253,21 +260,21 @@ async function seedAcmeRetail() {
     const order3 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-ACM-2026-0003',
-        customerName: 'Highland Hotel & Suites',
-        customerEmail: 'ops@highlandsuites.demo',
+        orderNumber: 'ORD-BHT-2026-0003',
+        customerName: 'Mahindra Logistics Express',
+        customerEmail: 'ops@mahindralogistics.demo',
         status: OrderStatus.CANCELLED,
-        totalAmount: 185.0,
-        taxAmount: 15.08,
-        notes: 'Order cancelled due to thermal printer supplier backorder.',
+        totalAmount: 14748.82,
+        taxAmount: 2249.82,
+        notes: 'Cancelled due to inventory stock-out on billing printer.',
         items: {
           create: [
             {
               organizationId: org.id,
               productId: products[4].id,
               quantity: 1,
-              unitPrice: 185.0,
-              totalPrice: 185.0,
+              unitPrice: 12499.00,
+              totalPrice: 12499.00,
             },
           ],
         },
@@ -283,16 +290,16 @@ async function seedAcmeRetail() {
   });
 }
 
-async function seedSummitSupplies() {
-  console.log('\n🏔️  [Tenant 2] Seeding Summit Supplies...');
+async function seedDeccanSupplies() {
+  console.log('\n🏔️  [Tenant 2] Seeding Deccan Supply Chain...');
 
   return await prisma.$transaction(async (tx) => {
     // 1. Create Organization
     const org = await tx.organization.create({
       data: {
-        name: 'Summit Supplies',
-        slug: 'summit-supplies',
-        currency: 'USD',
+        name: 'Deccan Supply Chain',
+        slug: 'deccan-supplies',
+        currency: 'INR',
         status: OrganizationStatus.ACTIVE,
       },
     });
@@ -302,9 +309,9 @@ async function seedSummitSupplies() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'admin@summit-supplies.com',
-          firstName: 'David',
-          lastName: 'Kim',
+          email: 'admin@deccan-supplies.in',
+          firstName: 'Ananya',
+          lastName: 'Iyer',
           passwordHash: defaultPasswordHash,
           role: UserRole.ADMIN,
           isActive: true,
@@ -313,9 +320,9 @@ async function seedSummitSupplies() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'manager@summit-supplies.com',
-          firstName: 'Emily',
-          lastName: 'Watson',
+          email: 'manager@deccan-supplies.in',
+          firstName: 'Vikram',
+          lastName: 'Nair',
           passwordHash: defaultPasswordHash,
           role: UserRole.MANAGER,
           isActive: true,
@@ -324,9 +331,9 @@ async function seedSummitSupplies() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'cashier@summit-supplies.com',
-          firstName: 'Frank',
-          lastName: 'Castle',
+          email: 'cashier@deccan-supplies.in',
+          firstName: 'Sneha',
+          lastName: 'Kulkarni',
           passwordHash: defaultPasswordHash,
           role: UserRole.CASHIER,
           isActive: true,
@@ -338,33 +345,33 @@ async function seedSummitSupplies() {
     const catHardware = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Hardware & Fasteners',
-        slug: 'summit-hardware',
-        description: 'Industrial fasteners, anchors, and brackets',
+        name: 'Industrial Hardware & Fasteners',
+        slug: 'deccan-hardware',
+        description: 'High-tensile fasteners, anchor bolts, and industrial brackets',
       },
     });
 
     const catSafety = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Safety & PPE',
-        slug: 'summit-safety',
-        description: 'Industrial helmets, eyewear, and respirators',
+        name: 'Plant Safety & Protective Equipment',
+        slug: 'deccan-safety',
+        description: 'ANSI & BIS certified eye shields, respirators, and protective gear',
       },
     });
 
-    // 4. Create Products with Varied Stock Levels
+    // 4. Create Products with Varied Stock Levels & INR Pricing
     const products = await Promise.all([
       // In Stock Items
       tx.product.create({
         data: {
           organizationId: org.id,
           categoryId: catHardware.id,
-          sku: 'SMT-HDW-4001',
-          name: 'Galvanized Hex Head Bolt Set (Grade 8)',
-          description: 'High-tensile Grade 8 galvanized steel bolts with nylon lock nuts (Pack of 100)',
-          unitPrice: 42.5,
-          costPrice: 21.0,
+          sku: 'DEC-HDW-4001',
+          name: 'Galvanized Hex Bolt Assortment (Grade 8.8)',
+          description: 'High-tensile zinc-plated metric bolts with nyloc nuts (Pack of 150)',
+          unitPrice: 3499.00,
+          costPrice: 1750.00,
           stockQuantity: 120, // IN STOCK
           reorderLevel: 25,
           status: ProductStatus.ACTIVE,
@@ -374,11 +381,11 @@ async function seedSummitSupplies() {
         data: {
           organizationId: org.id,
           categoryId: catSafety.id,
-          sku: 'SMT-SAF-5001',
-          name: 'ANSI Z87.1 Anti-Fog Safety Glasses',
-          description: 'Scratch-resistant polycarbonate wraparound protective eye shield',
-          unitPrice: 12.99,
-          costPrice: 4.8,
+          sku: 'DEC-SAF-5001',
+          name: 'Polycarbonate Protective Safety Goggles (Anti-Fog)',
+          description: 'Scratch-resistant wraparound safety glasses with UV400 and splash shield',
+          unitPrice: 899.00,
+          costPrice: 380.00,
           stockQuantity: 65, // IN STOCK
           reorderLevel: 15,
           status: ProductStatus.ACTIVE,
@@ -389,11 +396,11 @@ async function seedSummitSupplies() {
         data: {
           organizationId: org.id,
           categoryId: catSafety.id,
-          sku: 'SMT-SAF-5002',
-          name: 'Dual-Cartridge Half-Mask Respirator (N95)',
-          description: 'Ergonomic silicone face seal respirator with replaceable particulate filters',
-          unitPrice: 48.0,
-          costPrice: 26.5,
+          sku: 'DEC-SAF-5002',
+          name: 'Dual-Cartridge Chemical Respirator (FFP3)',
+          description: 'Silicone half-face respirator with twin organic vapor and particulate filters',
+          unitPrice: 4299.00,
+          costPrice: 2350.00,
           stockQuantity: 3, // LOW STOCK
           reorderLevel: 10,
           status: ProductStatus.ACTIVE,
@@ -404,11 +411,11 @@ async function seedSummitSupplies() {
         data: {
           organizationId: org.id,
           categoryId: catHardware.id,
-          sku: 'SMT-HDW-4002',
-          name: 'Pneumatic Framing Nailer (21 Degree)',
-          description: 'Heavy-duty magazine framing nailer for timber construction',
-          unitPrice: 229.0,
-          costPrice: 145.0,
+          sku: 'DEC-HDW-4002',
+          name: 'Pneumatic Framing Coil Nailer (Industrial)',
+          description: 'Heavy-duty magazine pallet and crate manufacturing pneumatic nail gun',
+          unitPrice: 18999.00,
+          costPrice: 12400.00,
           stockQuantity: 0, // OUT OF STOCK
           reorderLevel: 5,
           status: ProductStatus.OUT_OF_STOCK,
@@ -416,25 +423,25 @@ async function seedSummitSupplies() {
       }),
     ]);
 
-    // 5. Create Orders (COMPLETED, HELD)
+    // 5. Create Orders with 18% GST
     const order1 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-SMT-2026-0001',
-        customerName: 'Apex Construction Partners',
-        customerEmail: 'supply@apexconstruct.demo',
+        orderNumber: 'ORD-DEC-2026-0001',
+        customerName: 'Larsen & Toubro Heavy Civil Infrastructure',
+        customerEmail: 'procurement@larsentoubro.demo',
         status: OrderStatus.COMPLETED,
-        totalAmount: 170.0,
-        taxAmount: 13.85,
-        notes: 'Job site #4 delivery confirmed.',
+        totalAmount: 16515.28,
+        taxAmount: 2519.28,
+        notes: 'Hyderabad Metro Project Phase 2 site dispatch completed.',
         items: {
           create: [
             {
               organizationId: org.id,
               productId: products[0].id,
               quantity: 4,
-              unitPrice: 42.5,
-              totalPrice: 170.0,
+              unitPrice: 3499.00,
+              totalPrice: 13996.00,
             },
           ],
         },
@@ -444,21 +451,21 @@ async function seedSummitSupplies() {
     const order2 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-SMT-2026-0002',
-        customerName: 'Vanguard Industrial Services',
-        customerEmail: 'safety@vanguard-ind.demo',
+        orderNumber: 'ORD-DEC-2026-0002',
+        customerName: 'Godrej Process Equipment Division',
+        customerEmail: 'safety@godrej.demo',
         status: OrderStatus.HELD,
-        totalAmount: 96.0,
-        taxAmount: 7.82,
-        notes: 'Pending purchase order verification from safety department.',
+        totalAmount: 10145.64,
+        taxAmount: 1547.64,
+        notes: 'Held awaiting site safety audit clearance certificate.',
         items: {
           create: [
             {
               organizationId: org.id,
               productId: products[2].id,
               quantity: 2,
-              unitPrice: 48.0,
-              totalPrice: 96.0,
+              unitPrice: 4299.00,
+              totalPrice: 8598.00,
             },
           ],
         },
@@ -477,24 +484,25 @@ async function seedSummitSupplies() {
 async function main() {
   console.log('===============================================================');
   console.log('🌱 StockPulse Multi-Tenant Enterprise Database Seeder');
+  console.log('   Localization: India Enterprise Edition (INR, GST 18%)');
   console.log('===============================================================');
 
   await cleanExistingData();
-  const acme = await seedAcmeRetail();
-  const summit = await seedSummitSupplies();
+  const bharat = await seedBharatRetail();
+  const deccan = await seedDeccanSupplies();
 
   console.log('\n===============================================================');
   console.log('✅ Seeding Completed Successfully!');
   console.log('===============================================================');
-  console.log(`🏢 Organization 1: ${acme.org.name} (${acme.org.slug})`);
-  console.log(`   - Users: ${acme.users.length} (Admin: admin@acme-retail.com, Password: ${DEFAULT_PASSWORD})`);
-  console.log(`   - Products: ${acme.products.length} (In Stock, Low Stock, Out of Stock)`);
-  console.log(`   - Orders: ${acme.orders.length}`);
+  console.log(`🏢 Organization 1: ${bharat.org.name} (${bharat.org.slug})`);
+  console.log(`   - Users: ${bharat.users.length} (Admin: admin@bharat-retail.in, Password: ${DEFAULT_PASSWORD})`);
+  console.log(`   - Products: ${bharat.products.length} (In Stock, Low Stock, Out of Stock in INR)`);
+  console.log(`   - Orders: ${bharat.orders.length}`);
 
-  console.log(`\n🏢 Organization 2: ${summit.org.name} (${summit.org.slug})`);
-  console.log(`   - Users: ${summit.users.length} (Admin: admin@summit-supplies.com, Password: ${DEFAULT_PASSWORD})`);
-  console.log(`   - Products: ${summit.products.length} (In Stock, Low Stock, Out of Stock)`);
-  console.log(`   - Orders: ${summit.orders.length}`);
+  console.log(`\n🏢 Organization 2: ${deccan.org.name} (${deccan.org.slug})`);
+  console.log(`   - Users: ${deccan.users.length} (Admin: admin@deccan-supplies.in, Password: ${DEFAULT_PASSWORD})`);
+  console.log(`   - Products: ${deccan.products.length} (In Stock, Low Stock, Out of Stock in INR)`);
+  console.log(`   - Orders: ${deccan.orders.length}`);
   console.log('===============================================================');
 }
 

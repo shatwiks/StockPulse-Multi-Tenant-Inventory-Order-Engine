@@ -58,22 +58,39 @@ async function runPhase2Verification(): Promise<void> {
       return data.token;
     }
 
+    const acmeOrg = await prisma.organization.findFirstOrThrow({
+      where: { slug: { in: ['bharat-retail', 'acme-retail'] } },
+    });
+    const summitOrg = await prisma.organization.findFirstOrThrow({
+      where: { slug: { in: ['deccan-supplies', 'summit-supplies'] } },
+    });
+
+    const tenant1Admin = await prisma.user.findFirstOrThrow({
+      where: { organizationId: acmeOrg.id, role: 'ADMIN' },
+    });
+    const tenant1Manager = await prisma.user.findFirstOrThrow({
+      where: { organizationId: acmeOrg.id, role: 'MANAGER' },
+    });
+    const tenant1Cashier = await prisma.user.findFirstOrThrow({
+      where: { organizationId: acmeOrg.id, role: 'CASHIER' },
+    });
+    const tenant2Admin = await prisma.user.findFirstOrThrow({
+      where: { organizationId: summitOrg.id, role: 'ADMIN' },
+    });
+
     const tokens: TestTokens = {
-      acmeAdmin: await login('admin@acme-retail.com'),
-      acmeManager: await login('manager@acme-retail.com'),
-      acmeCashier: await login('cashier@acme-retail.com'),
-      summitAdmin: await login('admin@summit-supplies.com'),
+      acmeAdmin: await login(tenant1Admin.email),
+      acmeManager: await login(tenant1Manager.email),
+      acmeCashier: await login(tenant1Cashier.email),
+      summitAdmin: await login(tenant2Admin.email),
     };
 
-    console.log('   ✅ Acme Retail Admin token acquired.');
-    console.log('   ✅ Acme Retail Manager token acquired.');
-    console.log('   ✅ Acme Retail Cashier token acquired.');
-    console.log('   ✅ Summit Supplies Admin token acquired.');
+    console.log(`   ✅ ${acmeOrg.name} Admin token acquired.`);
+    console.log(`   ✅ ${acmeOrg.name} Manager token acquired.`);
+    console.log(`   ✅ ${acmeOrg.name} Cashier token acquired.`);
+    console.log(`   ✅ ${summitOrg.name} Admin token acquired.`);
 
     // 4. Fetch Sample Products from Each Tenant
-    const acmeOrg = await prisma.organization.findUniqueOrThrow({ where: { slug: 'acme-retail' } });
-    const summitOrg = await prisma.organization.findUniqueOrThrow({ where: { slug: 'summit-supplies' } });
-
     const acmeProd = await prisma.product.findFirstOrThrow({ where: { organizationId: acmeOrg.id } });
     const summitProd = await prisma.product.findFirstOrThrow({ where: { organizationId: summitOrg.id } });
 

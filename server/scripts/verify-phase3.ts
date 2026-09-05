@@ -17,8 +17,8 @@ async function runPhase3Verification() {
 
   try {
     // 1. Fetch seed organizations & users
-    const acmeOrg = await prisma.organization.findUniqueOrThrow({
-      where: { slug: 'acme-retail' },
+    const acmeOrg = await prisma.organization.findFirstOrThrow({
+      where: { slug: { in: ['bharat-retail', 'acme-retail'] } },
     });
 
     const acmeAdmin = await prisma.user.findFirstOrThrow({

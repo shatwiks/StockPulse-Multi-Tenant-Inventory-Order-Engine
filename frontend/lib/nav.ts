@@ -31,8 +31,8 @@ export type Tenant = {
 }
 
 export const tenants: Tenant[] = [
-  { id: '8fca3ba6-54a5-4985-ac05-2887f056f798', name: 'Acme Retail', plan: 'Enterprise', region: 'US-East', slug: 'acme-retail' },
-  { id: 'd4b8e3a2-11c9-482a-9f5e-71649281a0b3', name: 'Summit Supplies', plan: 'Business', region: 'US-West', slug: 'summit-supplies' },
+  { id: '8fca3ba6-54a5-4985-ac05-2887f056f798', name: 'Bharat Logistics & Retail', plan: 'Enterprise', region: 'AP-South-1 (Mumbai)', slug: 'bharat-retail' },
+  { id: 'd4b8e3a2-11c9-482a-9f5e-71649281a0b3', name: 'Deccan Supply Chain', plan: 'Business', region: 'AP-South-2 (Hyderabad)', slug: 'deccan-supplies' },
 ]
 
 export type AppNotification = {

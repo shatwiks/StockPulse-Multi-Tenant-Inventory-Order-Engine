@@ -38,7 +38,7 @@ export function ContentArea({ activeKey, onNavigate, tenant }: ContentAreaProps)
           <div className="flex flex-col gap-3">
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary/20 px-3 py-1 text-xs font-semibold text-primary">
               <TrendingUp className="size-3.5" />
-              StockPulse Operations Hub · {tenant?.name ?? 'Acme Corp'}
+              StockPulse Operations Hub · {tenant?.name ?? 'Bharat Logistics & Retail'}
             </span>
             <h1 className="text-3xl font-extrabold tracking-tight text-white">
               Enterprise Logistics &amp; POS Station
@@ -143,7 +143,7 @@ export function ContentArea({ activeKey, onNavigate, tenant }: ContentAreaProps)
           {active.title}
         </h1>
         <p className="text-xs text-muted-foreground">
-          Tenant: {tenant?.name ?? 'Acme Corp'} · Region: {tenant?.region ?? 'US-East'}
+          Tenant: {tenant?.name ?? 'Bharat Logistics & Retail'} · Region: {tenant?.region ?? 'AP-South-1 (Mumbai)'}
         </p>
       </div>
 
@@ -154,7 +154,7 @@ export function ContentArea({ activeKey, onNavigate, tenant }: ContentAreaProps)
             {active.title} Settings &amp; Reporting
           </p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Multi-tenant partition active for {tenant?.name ?? 'Acme Corp'}.
+            Multi-tenant partition active for {tenant?.name ?? 'Bharat Logistics & Retail'}.
           </p>
           <div className="flex items-center gap-2 pt-2">
             <Button size="sm" onClick={() => onNavigate?.('inventory')}>

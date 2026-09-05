@@ -326,7 +326,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
 
     const payload = {
       customerName: selectedCustomer.name,
-      customerEmail: selectedCustomer.email || 'customer@acme-retail.com',
+      customerEmail: selectedCustomer.email || 'customer@bharat-retail.in',
       items: cart.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
@@ -373,7 +373,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                 POS Checkout Station
               </span>
               <span className="text-xs text-muted-foreground font-mono">
-                Station #04 · {tenant?.name ?? 'Acme Retail'}
+                Station #04 · {tenant?.name ?? 'Bharat Logistics & Retail'}
               </span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -730,7 +730,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
             </div>
 
             <div className="flex justify-between text-muted-foreground">
-              <span>Estimated Tax (8.875% auto)</span>
+              <span>GST (18% auto)</span>
               <span className="font-mono font-semibold text-foreground">{usd(taxAmount)}</span>
             </div>
 
@@ -982,7 +982,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
               </div>
               <div>
                 <span className="text-zinc-500 block">Organization</span>
-                <span className="font-semibold text-white">{tenant?.name ?? 'Acme Retail'}</span>
+                <span className="font-semibold text-white">{tenant?.name ?? 'Bharat Logistics & Retail'}</span>
               </div>
               <div>
                 <span className="text-zinc-500 block">Customer</span>
@@ -1036,7 +1036,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                 </div>
               )}
               <div className="flex justify-between text-zinc-400 font-sans">
-                <span>Sales Tax (8.875% auto)</span>
+                <span>GST (18% auto)</span>
                 <span className="font-mono text-white">{usd(receiptOrder.taxAmount)}</span>
               </div>
               <div className="flex justify-between items-baseline pt-2 border-t border-zinc-800 text-sm font-sans font-bold">

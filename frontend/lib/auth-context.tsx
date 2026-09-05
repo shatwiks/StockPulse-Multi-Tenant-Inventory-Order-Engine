@@ -28,7 +28,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-const DEFAULT_DEMO_EMAIL = 'admin@acme-retail.com'
+const DEFAULT_DEMO_EMAIL = 'admin@bharat-retail.in'
 const DEFAULT_DEMO_PASS = 'StockPulse2026!'
 
 export function useAuth() {
@@ -89,8 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   const switchRole = useCallback(
-    async (newRole: UserRole, tenantSlug = 'acme-retail') => {
-      const emailDomain = tenantSlug.includes('summit') ? 'summit-supplies.com' : 'acme-retail.com'
+    async (newRole: UserRole, tenantSlug = 'bharat-retail') => {
+      const emailDomain = tenantSlug.includes('deccan') ? 'deccan-supplies.in' : 'bharat-retail.in'
       const email = `${newRole.toLowerCase()}@${emailDomain}`
 
       setIsLoading(true)

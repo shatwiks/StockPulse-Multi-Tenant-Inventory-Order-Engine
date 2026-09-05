@@ -97,8 +97,8 @@ High-volume B2B Point-of-Sale (POS) and inventory platforms experience severe da
 ```mermaid
 sequenceDiagram
     autonumber
-    actor TerminalA as POS Terminal A (Acme Retail)
-    actor TerminalB as POS Terminal B (Acme Retail)
+    actor TerminalA as POS Terminal A (Bharat Retail)
+    actor TerminalB as POS Terminal B (Bharat Retail)
     participant API as Express API Layer
     participant DB as PostgreSQL 16 (Engine)
 
@@ -164,14 +164,14 @@ The database is seeded with two multi-tenant organizations configured with Role-
 
 **Default Password for all seeded accounts:** `StockPulse2026!`
 
-| Organization | Role | Account Email | Capabilities & System Boundary |
-| --- | --- | --- | --- |
-| **Acme Retail** (`acme-retail`) | `ADMIN` | `admin@acme-retail.com` | Unrestricted catalog CRUD, price updates, stock reconciliations, order desk. |
-| **Acme Retail** (`acme-retail`) | `MANAGER` | `manager@acme-retail.com` | Catalog CRUD, manual stock counts, order desk. Restricted from system administration. |
-| **Acme Retail** (`acme-retail`) | `CASHIER` | `cashier@acme-retail.com` | View-only catalog, POS terminal operations. Price mutations and deletions return `403 Forbidden`. |
-| **Summit Supplies** (`summit-supplies`) | `ADMIN` | `admin@summit-supplies.com` | Isolated to Summit Supplies tenant. Cross-tenant access to Acme records returns `404 Not Found`. |
-| **Summit Supplies** (`summit-supplies`) | `MANAGER` | `manager@summit-supplies.com` | Summit Supplies inventory control and order processing. |
-| **Summit Supplies** (`summit-supplies`) | `CASHIER` | `cashier@summit-supplies.com` | Summit Supplies POS station. |
+| Organization | Role | Account Email | Personnel Name | Capabilities & System Boundary |
+| --- | --- | --- | --- | --- |
+| **Bharat Logistics & Retail** (`bharat-retail`) | `ADMIN` | `admin@bharat-retail.in` | Aarav Sharma | Unrestricted catalog CRUD, INR price updates, stock reconciliations, order desk. |
+| **Bharat Logistics & Retail** (`bharat-retail`) | `MANAGER` | `manager@bharat-retail.in` | Priya Patel | Catalog CRUD, manual stock counts, order desk. Restricted from system administration. |
+| **Bharat Logistics & Retail** (`bharat-retail`) | `CASHIER` | `cashier@bharat-retail.in` | Rohan Verma | View-only catalog, POS terminal operations. Price mutations and deletions return `403 Forbidden`. |
+| **Deccan Supply Chain** (`deccan-supplies`) | `ADMIN` | `admin@deccan-supplies.in` | Ananya Iyer | Isolated to Deccan Supply Chain tenant. Cross-tenant access to Bharat Retail records returns `404 Not Found`. |
+| **Deccan Supply Chain** (`deccan-supplies`) | `MANAGER` | `manager@deccan-supplies.in` | Vikram Nair | Deccan Supply Chain inventory control and order processing. |
+| **Deccan Supply Chain** (`deccan-supplies`) | `CASHIER` | `cashier@deccan-supplies.in` | Sneha Kulkarni | Deccan Supply Chain POS station. |
 
 ---
 

@@ -132,23 +132,29 @@ export const products: Product[] = [
   { id: 'p14', sku: 'FLU-CUT-1', name: 'Cutting Fluid Concentrate', category: 'fluids', price: 28.75, unitPrice: 28.75, stock: 12, stockQuantity: 12, reorderPoint: 25, reorderLevel: 25 },
 ]
 
-const usdFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-})
+export function formatCurrency(amount: number | string | null | undefined): string {
+  const numericValue = typeof amount === 'string' ? parseFloat(amount) : (amount ?? 0);
+  if (isNaN(numericValue)) return '₹0.00';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(numericValue);
+}
 
-export const usd = (value: number) => usdFormatter.format(value)
+export const inr = (value: number | string | null | undefined) => formatCurrency(value);
+export const usd = formatCurrency; // backward compatibility for all existing dashboard views
 
-const numberFormatter = new Intl.NumberFormat('en-US')
-export const compactNumber = (value: number) => numberFormatter.format(value)
+const numberFormatter = new Intl.NumberFormat('en-IN');
+export const compactNumber = (value: number) => numberFormatter.format(value);
 
-export type Customer = { id: string; name: string; type: string; email?: string }
+export type Customer = { id: string; name: string; type: string; email?: string };
 
 export const customers: Customer[] = [
-  { id: 'walk-in', name: 'Walk-in Customer', email: 'walkin@customer.com', type: 'Retail' },
-  { id: 'acme-field', name: 'Acme Field Crew', email: 'field@acme-retail.com', type: 'Internal' },
-  { id: 'bldrs', name: 'Builders United LLC', email: 'orders@buildersunited.com', type: 'Wholesale' },
-  { id: 'metro', name: 'Metro Maintenance Dept.', email: 'procurement@metro.gov', type: 'Contract' },
-]
+  { id: 'walk-in', name: 'Walk-in Retail Buyer', email: 'walkin@retail.in', type: 'Retail' },
+  { id: 'bharat-field', name: 'Bharat Logistics Depot #4', email: 'depot4@bharat-retail.in', type: 'Internal' },
+  { id: 'tata-proj', name: 'Tata Projects Infrastructure', email: 'procurement@tataprojects.in', type: 'Corporate' },
+  { id: 'lt-eng', name: 'Larsen & Toubro Site Ops', email: 'siteops@larsentoubro.in', type: 'Enterprise' },
+];
 
-export const TAX_RATE = 0.08875
+export const TAX_RATE = 0.18; // Standard 18% GST (9% CGST + 9% SGST)

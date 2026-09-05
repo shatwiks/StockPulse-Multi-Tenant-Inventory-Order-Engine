@@ -181,7 +181,7 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
               required
               value={sku}
               onChange={(e) => setSku(e.target.value)}
-              placeholder="ACME-AUDIO-09"
+              placeholder="BHT-SAF-1005"
               className={`${fieldClass} font-mono uppercase`}
             />
           </div>
@@ -208,7 +208,7 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="grid gap-1.5">
             <label htmlFor={priceId} className="text-sm font-medium">
-              Unit price (USD) <span className="text-destructive">*</span>
+              Unit price (INR) <span className="text-destructive">*</span>
             </label>
             <input
               id={priceId}
@@ -218,7 +218,7 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
               step="0.01"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="89.99"
+              placeholder="2499.00"
               className={fieldClass}
             />
           </div>
