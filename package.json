@@ -1,0 +1,21 @@
+{
+  "name": "stockpulse-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StockPulse: Multi-Tenant B2B Inventory & Order Engine",
+  "workspaces": [
+    "frontend",
+    "server"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --prefix server",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:server": "npm run build --prefix server",
+    "build:frontend": "npm run build --prefix frontend",
+    "db:migrate": "npm run db:migrate --prefix server",
+    "db:seed": "npm run db:seed --prefix server",
+    "db:push": "npm run db:push --prefix server",
+    "test:constraints": "npm run test:constraints --prefix server",
+    "test:checkout": "npm run test:checkout --prefix server"
+  }
+}
