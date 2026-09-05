@@ -19,217 +19,198 @@
 
 ---
 
-## 📌 Problem Statement & Architecture
+# StockPulse: Multi-Tenant B2B Inventory & Order Engine
 
-### The Concurrency & Isolation Challenge in High-Volume B2B POS
-1. **Overselling & Inventory Drift:** Concurrent cashiers and batch orders purchasing the last remaining units simultaneously cause negative stock balances and fulfillment failures.
-2. **Deadlocks (PostgreSQL `40P01`):** In multi-item checkouts, when Transaction A locks Product 1 then requests Product 2, while Transaction B locks Product 2 then requests Product 1, cyclical lock-dependency triggers database deadlocks and aborted transactions.
-3. **Broken Object-Level Authorization (BOLA / IDOR):** Shared multi-tenant relational schemas risk cross-tenant data exposure and unauthorized price/stock tampering without strict tenant-scoped queries.
+---
 
-### System Architecture & Transaction Flow
+## 📄 Resume Snapshot (Google X-Y-Z Format)
+
+**StockPulse: Multi-Tenant B2B Inventory & Order Engine**
+
+**Core Technologies:** TypeScript, Next.js 16, React 19, Node.js, Express, PostgreSQL 16, Prisma ORM, Docker Compose, TanStack Query, Tailwind CSS, GitHub Actions CI/CD, WCAG 2.1 AA
+
+**Repository:** [github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine](https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine)
+
+* **Eliminated inventory overselling and PostgreSQL deadlocks (40P01)** during concurrent checkouts by engineering deterministic row-level lock ordering (`SELECT ... FOR UPDATE ORDER BY id ASC`) within atomic interactive transactions, verified through automated 10-thread parallel stress-testing yielding 0 negative-stock drift.
+* **Enforced zero-trust tenant isolation and role boundaries** across 3 access tiers (Admin, Manager, Cashier) by establishing strict UUID foreign-key scoping, composite performance indexes (`[organizationId, sku]`), and database storage-engine check constraints (`stock_quantity >= 0`) that reject cross-tenant mutations with HTTP 404/403.
+* **Accelerated POS checkout resilience and cashier throughput** by building a high-performance Next.js 16/React 19 client with TanStack Query, implementing 300ms debounced catalog search, zero-CLS loading states, and automated client-side cart reconciliation upon receiving structured HTTP 409 Conflict shortage payloads.
+* **Orchestrated an automated multi-stage CI/CD pipeline** via Docker Compose and GitHub Actions running ephemeral PostgreSQL containers, strict TypeScript typechecking, database migrations, seed scripts, and an automated AST accessibility scanner certifying 100% WCAG 2.1 AA compliance across 19 components.
+
+---
+
+## 💻 Local Development & Quickstart
+
+### Prerequisites
+
+* Docker Desktop (v20+) **OR** Node.js (v20+) and PostgreSQL 16 on port `5432`
+* Git
+
+### Option 1: Single-Command Docker Setup (Recommended)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine.git
+cd StockPulse-Multi-Tenant-Inventory-Order-Engine
+
+# 2. Build and launch all containerized services
+docker compose up --build
+
+```
+
+**Service Endpoints:**
+
+* **Frontend Web Application:** [http://localhost:3000](http://localhost:3000)
+* **Backend REST API Engine:** [http://localhost:3001](http://localhost:3001)
+* **PostgreSQL Database:** `localhost:5432` (`stockpulse_inventory`)
+
+*Note: The container healthcheck automatically runs database migrations and seeds initial tenant organizations upon startup.*
+
+To trigger an explicit re-seed inside the active container:
+
+```bash
+npm run docker:seed
+# Alternative: bash scripts/docker-seed.sh
+
+```
+
+### Option 2: Native Host Setup
+
+```bash
+# 1. Install root and workspace dependencies
+npm install
+
+# 2. Run Prisma migrations and seed initial tenant datasets
+npm run db:migrate
+npm run db:seed
+
+# 3. Launch Express server (:3001) and Next.js frontend (:3000) concurrently
+npm run dev
+
+```
+
+---
+
+## 🏛️ System Architecture & Concurrency Model
+
+High-volume B2B Point-of-Sale (POS) and inventory platforms experience severe data drift when concurrent transactions attempt to read and write shared inventory records. StockPulse resolves this at the database engine tier.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Cashier as POS Cashier / Client
-    participant Frontend as Next.js 16 (React 19 + TanStack Query)
-    participant API as Express API (Hardened Security Gateway)
-    participant DB as PostgreSQL 16 (Row-Level Locking Engine)
+    actor TerminalA as POS Terminal A (Acme Retail)
+    actor TerminalB as POS Terminal B (Acme Retail)
+    participant API as Express API Layer
+    participant DB as PostgreSQL 16 (Engine)
 
-    Cashier->>Frontend: Click "Complete Payment" (POS Basket)
-    Frontend->>API: POST /api/v1/orders (Bearer JWT + Basket Items)
-    
-    Note over API: 1. Verify JWT & Extract Tenant Context (organization_id)<br/>2. Validate payload schema with Zod<br/>3. Enforce RBAC permissions (CASHIER/MANAGER/ADMIN)
-    
-    API->>DB: BEGIN TRANSACTION (ISOLATION LEVEL READ COMMITTED)
-    
-    Note over DB: Deterministic Lock Acquisition (ORDER BY id ASC):<br/>SELECT ... FROM products WHERE id = ANY(...) FOR UPDATE
-    
-    alt Sufficient Stock for All Items
-        DB-->>API: Row Locks Granted & Verified Balances
-        API->>DB: UPDATE products SET stock_quantity = stock_quantity - delta
-        API->>DB: INSERT INTO orders + INSERT INTO order_items
-        API->>DB: COMMIT TRANSACTION
-        API-->>Frontend: HTTP 201 Created (Order Receipt & Updated Balances)
-        Frontend-->>Cashier: Display Printable Receipt Modal + Trap Focus
-    else Insufficient Inventory (Race Condition Shortage)
-        DB-->>API: Itemized Stock Shortage Detected
-        API->>DB: ROLLBACK TRANSACTION
-        API-->>Frontend: HTTP 409 Conflict (code: INSUFFICIENT_STOCK, details: [shortages])
-        Frontend-->>Cashier: Trigger 409 Shortage Dialog & Reconcile Cart Quantities
+    Note over TerminalA, TerminalB: Both cashiers checkout last 2 units simultaneously
+    TerminalA->>API: POST /api/v1/orders (SKU-HEADPHONES: qty 2)
+    TerminalB->>API: POST /api/v1/orders (SKU-HEADPHONES: qty 2)
+
+    rect rgb(20, 35, 25)
+    Note over API, DB: Terminal A Interactive Transaction ($transaction)
+    API->>DB: SELECT * FROM products WHERE id IN (...) ORDER BY id ASC FOR UPDATE
+    DB-->>API: Deterministic row lock granted to Terminal A
+    API->>DB: Verify stock (2 >= 2) -> Decrement stock to 0
+    API->>DB: Insert Order & OrderItem records
+    DB-->>API: Transaction Committed
     end
+
+    API-->>TerminalA: HTTP 201 Created (Order Receipt Payload)
+
+    rect rgb(45, 20, 20)
+    Note over API, DB: Terminal B Lock Resolution
+    DB-->>API: Lock released to Terminal B
+    API->>API: Shortage detected: Available (0) < Requested (2)
+    API->>DB: ROLLBACK Transaction
+    end
+
+    API-->>TerminalB: HTTP 409 Conflict (Structured Shortage Payload)
+    Note over TerminalB: TanStack Query intercepts 409 -> Reconciles cart UI to 0
+
 ```
 
 ---
 
-## ⚡ Key Engineering Highlights
+## ⚡ Core Engineering Differentiators
 
-### 1. Deterministic Row-Level Locking (`SELECT ... FOR UPDATE ORDER BY id ASC`)
-* **Deadlock Elimination:** By sorting all product UUIDs in strictly ascending order (`ORDER BY id ASC`) prior to acquiring pessimistic row locks inside the transaction, cyclical wait-for graphs ($A \to B$ vs. $B \to A$) are mathematically impossible.
-* **Zero Overselling Guarantee:** Stock availability is verified within the active lock boundary. If stock is sufficient, inventory is deducted atomically before the transaction commits.
+* **Deterministic Deadlock Elimination:** Multi-item checkouts typically trigger cyclic wait-for dependency graphs (`Transaction 1` holds lock on Item A waiting for Item B, while `Transaction 2` holds lock on Item B waiting for Item A). StockPulse sorts all incoming product UUIDs in ascending order (`ORDER BY id ASC`) before executing `SELECT ... FOR UPDATE`, guaranteeing that locks are acquired in a uniform global sequence.
+* **Storage-Engine Negative Stock Invariant:** Application-level validation is insufficient under race conditions. StockPulse implements an explicit PostgreSQL table check constraint (`CONSTRAINT "products_stock_quantity_check" CHECK ("stock_quantity" >= 0)`). Any operation driving inventory negative fails at the disk write layer.
+* **Graceful HTTP 409 Cart Reconciliation:** Rather than displaying generic checkout failure screens, the API emits a typed shortage breakdown (`productId`, `sku`, `name`, `availableStock`, `requestedQuantity`). The React client updates local state, sets the line-item balance to the actual available count, and alerts the user without discarding unrelated items.
+* **Zero-Trust Multi-Tenancy:** Data isolation is maintained across all entities (`Organization`, `User`, `Category`, `Product`, `Order`, `OrderItem`). Every query explicitly matches against `organization_id` extracted from verified JWT claims, supported by composite indexes (`[organization_id, sku]` and `[organization_id, created_at DESC]`) for index-only scans.
+* **Unified API Response Envelope:** REST endpoints adhere strictly to a standardized contract:
+```typescript
+// Success Envelope
+{
+  success: true,
+  data: T,
+  meta?: { page: number, limit: number, total: number, totalPages: number }
+}
 
-### 2. Immediate 409 Conflict Rollback & Real-Time Cart Reconciliation
-* **ACID Integrity:** When a concurrent transaction claims the remaining inventory milliseconds earlier, StockPulse immediately aborts and rolls back the checkout transaction.
-* **Automated POS Cart Reconciliation:** Returns structured shortage details (`productId`, `sku`, `name`, `availableStock`, `requestedQuantity`). The frontend automatically reconciles the cashier's cart to the exact available physical balance and triggers an accessible alert modal.
+// Error Envelope
+{
+  success: false,
+  error: { code: string, message: string, details?: unknown }
+}
 
-### 3. Zero-Trust Multi-Tenancy & Integrity Constraints
-* **Strict Tenant Scoping:** Every relational table (`organizations`, `users`, `categories`, `products`, `orders`, `order_items`) is partitioned by `organization_id` (UUID) with foreign keys enforcing `ON DELETE CASCADE`.
-* **Hardware-Level Negative Stock Defense:** Even if an application bug bypassed validation, PostgreSQL enforces:
-  ```sql
-  CONSTRAINT "products_stock_quantity_check" CHECK ("stock_quantity" >= 0)
-  ```
-  Any attempt to drive inventory below zero is aborted at the database engine level.
-* **Composite Performance Indexes:** High-speed lookup and unique constraint enforcement:
-  * `@@unique([organizationId, sku], name: "unique_org_sku")`
-  * `@@index([organizationId, status])`
-  * `@@index([organizationId, createdAt(sort: Desc)])`
-
-### 4. Standardized Enterprise API Envelope
-Every endpoint strictly adheres to a typed, predictable contract:
-* **Success Contract:**
-  ```json
-  {
-    "success": true,
-    "data": { ... },
-    "meta": {
-      "page": 1,
-      "limit": 20,
-      "total": 128,
-      "totalPages": 7
-    }
-  }
-  ```
-* **Error Contract:**
-  ```json
-  {
-    "success": false,
-    "error": {
-      "code": "INSUFFICIENT_STOCK",
-      "message": "Insufficient inventory to fulfill order",
-      "details": [
-        {
-          "productId": "6e313f2b-e0dd-4ff7-9770-01e6a579d8cd",
-          "sku": "ACME-AUDIO-01",
-          "name": "Wireless Noise-Cancelling Headphones",
-          "availableStock": 2,
-          "requestedQuantity": 5
-        }
-      ]
-    }
-  }
-  ```
-
-### 5. Tuned Connection Pooling
-Production-hardened Prisma connection parameters configured for PostgreSQL:
-```
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/stockpulse_inventory?schema=public&connection_limit=10&pool_timeout=20"
 ```
 
-### 6. WCAG 2.1 AA Accessibility & Production Audit
-* **100% Keyboard & Screen-Reader Accessible:** All interactive dialogs implement `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` with focus trapping and restore-on-close.
-* **Zero Form Inconsistencies:** Every form control is bound to an explicit `<label htmlFor="...">`.
-* **Automated Audit Suite:** Audited via `npm run test:a11y` during continuous integration.
+
 
 ---
 
-## 🔑 Seeded Demo Credentials
+## 🔑 Demo Access Credentials
 
-StockPulse seeds two distinct tenant organizations with role-based access control (ADMIN, MANAGER, CASHIER). Default password across all seeded accounts is:
+The database is seeded with two multi-tenant organizations configured with Role-Based Access Control (RBAC).
 
-> **Password:** `StockPulse2026!`
+**Default Password for all seeded accounts:** `StockPulse2026!`
 
-| Organization | Role | Email | Permissions & Access Scope |
-|---|---|---|---|
-| **Acme Retail** (`acme-retail`) | **ADMIN** | `admin@acme-retail.com` | Unrestricted catalog CRUD, price mutations, stock adjustments, order desk. |
-| **Acme Retail** (`acme-retail`) | **MANAGER** | `manager@acme-retail.com` | Catalog CRUD, stock reconciliations, order desk. |
-| **Acme Retail** (`acme-retail`) | **CASHIER** | `cashier@acme-retail.com` | Read catalog, place POS checkout orders. Price edits and deletions rejected (403). |
-| **Summit Supplies** (`summit-supplies`) | **ADMIN** | `admin@summit-supplies.com` | Isolated to Summit Supplies tenant. Cross-tenant queries return 404/403. |
-| **Summit Supplies** (`summit-supplies`) | **MANAGER** | `manager@summit-supplies.com` | Summit Supplies inventory & order management. |
-| **Summit Supplies** (`summit-supplies`) | **CASHIER** | `cashier@summit-supplies.com` | Summit Supplies POS terminal. |
+| Organization | Role | Account Email | Capabilities & System Boundary |
+| --- | --- | --- | --- |
+| **Acme Retail** (`acme-retail`) | `ADMIN` | `admin@acme-retail.com` | Unrestricted catalog CRUD, price updates, stock reconciliations, order desk. |
+| **Acme Retail** (`acme-retail`) | `MANAGER` | `manager@acme-retail.com` | Catalog CRUD, manual stock counts, order desk. Restricted from system administration. |
+| **Acme Retail** (`acme-retail`) | `CASHIER` | `cashier@acme-retail.com` | View-only catalog, POS terminal operations. Price mutations and deletions return `403 Forbidden`. |
+| **Summit Supplies** (`summit-supplies`) | `ADMIN` | `admin@summit-supplies.com` | Isolated to Summit Supplies tenant. Cross-tenant access to Acme records returns `404 Not Found`. |
+| **Summit Supplies** (`summit-supplies`) | `MANAGER` | `manager@summit-supplies.com` | Summit Supplies inventory control and order processing. |
+| **Summit Supplies** (`summit-supplies`) | `CASHIER` | `cashier@summit-supplies.com` | Summit Supplies POS station. |
 
 ---
 
-## 🚀 Quickstart Guide
+## 🧪 Verification & Automated Testing
 
-### Option A: Single-Command Docker Setup (Recommended)
-Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (v20+)
+StockPulse includes automated test suites covering access control, schema invariants, and high-concurrency race conditions:
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine.git
-cd StockPulse-Multi-Tenant-Inventory-Order-Engine
-
-# 2. Launch complete stack (Postgres + Express API + Next.js Frontend)
-docker compose up --build
-```
-
-The stack automatically boots:
-* 🌐 **Frontend Web App:** [http://localhost:3000](http://localhost:3000)
-* ⚡ **Backend API Server:** [http://localhost:3001](http://localhost:3001)
-* 🐘 **PostgreSQL 16 Database:** `localhost:5432` (`stockpulse_inventory`)
-* 🔁 **Database Migration & Seed:** Automatically executed during startup via container health checks.
-
-To manually re-seed the Docker database at any time:
-```bash
-npm run docker:seed
-# or: bash scripts/docker-seed.sh
-```
-
----
-
-### Option B: Native Local Development
-
-Prerequisites: Node.js 20+ and running PostgreSQL 16 on port 5432.
-
-```bash
-# 1. Install root workspace dependencies
-npm install
-
-# 2. Generate Prisma client & apply migrations
-npm run db:migrate
-
-# 3. Seed multi-tenant demo organizations and inventory
-npm run db:seed
-
-# 4. Start backend API and Next.js frontend concurrently
-npm run dev
-```
-
----
-
-## 🧪 Automated Verification & Test Suites
-
-StockPulse includes automated test suites covering integrity constraints, security isolation, and extreme concurrency:
-
-```bash
-# 1. Verify WCAG 2.1 AA Accessibility across all components
+# 1. Execute WCAG 2.1 AA accessibility audit across all 19 frontend components
 npm run test:a11y
 
-# 2. Verify Database CHECK constraints (negative stock prevention)
+# 2. Verify database CHECK constraints (asserts failure on negative stock writes)
 npm run test:constraints
 
-# 3. Verify Phase 2 Security (BOLA/IDOR, RBAC, 10x concurrent checkout stress test)
+# 3. Verify security isolation (BOLA/IDOR, RBAC, and 10x concurrent checkout stress test)
 npm run test:phase2
 
-# 4. Verify Phase 3 End-to-End API Integration & 409 Shortage Reconciler
+# 4. Verify end-to-end API integration and 409 conflict reconciliation flow
 npm run test:phase3
 
-# 5. Full Production Build (TypeScript compile + Next.js optimization)
+# 5. Run full workspace production build (TypeScript strict check + Next.js build)
 npm run build
+
 ```
 
 ---
 
-## 🛡️ Automated CI/CD (GitHub Actions)
+## 🛡️ Continuous Integration & Quality Gates
 
-StockPulse enforces strict quality gates on every push and pull request to `main`:
-* **Matrix Service Container:** Ephemeral `postgres:16-alpine` with healthcheck probing.
-* **Strict Typechecking:** Zero TypeScript errors across `server/` and `frontend/` workspaces.
-* **Accessibility Audit:** Validates accessible names, modal contracts, and form labeling.
-* **Stress Test Suite:** Executes 10 concurrent transactions against 2 items of stock, verifying exactly 1 order succeeds (201) and 9 conflict cleanly (409) with 0 overselling.
-* **Production Build:** Validates Next.js build compilation and static optimization.
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push and pull request to `main`:
+
+* **PostgreSQL 16 Service Container:** Boots an isolated PostgreSQL service with an active readiness polling loop (`pg_isready`).
+* **Deterministic Installation:** Runs `npm install` across all monorepo workspaces and generates the Linux-native Prisma query engine.
+* **Zero-Tolerance Typecheck:** Runs `tsc --noEmit` across both `server/` and `frontend/`.
+* **Automated Accessibility Testing:** Runs the AST scanner ensuring all interactive controls have accessible names and dialogs implement focus containment.
+* **Migration & Concurrency Suite:** Deploys schema DDL, runs the seed script, and triggers 10 simultaneous checkout requests against 2 units of stock—validating that exactly 1 succeeds (`201`), 9 roll back (`409`), and final stock remains at 0.
 
 ---
 
-## 📄 License
-This project is licensed under the [MIT License](LICENSE).
+## 📜 License
+
+Distributed under the [MIT License](https://www.google.com/search?q=LICENSE).
