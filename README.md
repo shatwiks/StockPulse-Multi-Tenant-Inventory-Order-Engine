@@ -269,7 +269,7 @@ npm run db:seed
 
 ---
 
-### Step 5: Verify Security Constraints & Concurrency Locking
+### Step 5: Verify Security Constraints, RBAC & Concurrency Locking
 
 Execute the automated test suites:
 
@@ -277,21 +277,11 @@ Execute the automated test suites:
 # Test 1: Verify multi-tenant isolation and CHECK constraints
 npm run test:constraints
 
-# Test 2: Concurrency stress test (Row-locking & 409 Conflict rollback)
+# Test 2: Basic Concurrency stress test (Row-locking & 409 Conflict rollback)
 npm run test:checkout
-```
 
-Expected output for `test:checkout`:
-```
-===============================================================
-⚡ Concurrency Race-Condition & Row-Locking Test
-===============================================================
-📦 Created test product 'High-Precision Laser Transponder (Race Test Item)' (10 units)
-🚀 Dispatching 2 concurrent checkouts requesting 7 units each (Total: 14 units)...
-   ✅ Buyer A: SUCCESS! Order created -> CONCUR-ORD-1788617015751-723
-   🛑 Buyer B: REJECTED WITH 409 CONFLICT! (Insufficient stock: Requested: 7, Available: 3)
-🔍 Final Database State: Stock = 3 units
-🎉 PASS: Row-level locking prevented race condition, overselling, and negative stock!
+# Test 3: Comprehensive Phase 2 Verification Suite (Cross-tenant, RBAC, 10x Concurrent Checkouts)
+npm run test:phase2
 ```
 
 ---
@@ -308,7 +298,343 @@ npm run dev:frontend
 
 ---
 
-## 5. Seed Accounts
+## 5. Role-Based Access Control (RBAC) Matrix
+
+StockPulse enforces the **Principle of Least Privilege (PoLP)** across all operations:
+
+| Resource & Operation | HTTP Method & Route | Required Roles | CASHIER | MANAGER | ADMIN |
+|---|---|---|:---:|:---:|:---:|
+| User Authentication | `POST /api/v1/auth/login` | Public | ✅ | ✅ | ✅ |
+| Query Catalog & Inventory | `GET /api/v1/products` | All Roles | ✅ | ✅ | ✅ |
+| Create Product | `POST /api/v1/products` | `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
+| Update Product & Price | `PATCH /api/v1/products/:id` | `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
+| Physical Stock Adjustment | `PATCH /api/v1/products/:id/stock`| `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
+| Delete Product | `DELETE /api/v1/products/:id` | `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
+| Place POS Order (Checkout) | `POST /api/v1/orders` | `ADMIN`, `MANAGER`, `CASHIER` | ✅ | ✅ | ✅ |
+| View Order Receipts & History | `GET /api/v1/orders` | `ADMIN`, `MANAGER`, `CASHIER` | ✅ | ✅ | ✅ |
+
+---
+
+## 6. Hardened REST API Specification
+
+All authenticated requests require an `Authorization: Bearer <JWT>` header (or an HTTP-only cookie). Every endpoint automatically scopes queries to `req.user.organizationId` — tenant isolation is mathematically enforced at the query predicate layer.
+
+### 6.1 Authentication (`/api/v1/auth`)
+
+#### `POST /api/v1/auth/login`
+Authenticates a user within their organization and issues a signed JWT token (expires in 24h).
+
+- **Request Body**:
+```json
+{
+  "email": "cashier@acme-retail.com",
+  "password": "StockPulse2026!"
+}
+```
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "23630f6a-ba8c-4bc4-b7db-115f013d33e5",
+      "organizationId": "8fca3ba6-54a5-4985-ac05-2887f056f798",
+      "email": "cashier@acme-retail.com",
+      "role": "CASHIER",
+      "firstName": "John",
+      "lastName": "Cashier",
+      "organization": {
+        "id": "8fca3ba6-54a5-4985-ac05-2887f056f798",
+        "name": "Acme Retail",
+        "slug": "acme-retail",
+        "currency": "USD"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 6.2 Products & Inventory (`/api/v1/products`)
+
+#### `GET /api/v1/products`
+Returns a paginated list of products scoped strictly to the caller's organization.
+
+- **Query Parameters**:
+  - `page` *(number, optional, default: 1)*: Page number.
+  - `limit` *(number, optional, default: 20, max: 100)*: Max items per page to prevent memory exhaustion DoS.
+  - `search` *(string, optional)*: Sanitized substring search against `name` and `sku`.
+  - `category` *(UUID, optional)*: Filter by category ID.
+  - `status` *(string, optional)*: Filter by stock status (`IN_STOCK`, `LOW_STOCK`, `OUT_OF_STOCK`).
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
+      "organizationId": "8fca3ba6-54a5-4985-ac05-2887f056f798",
+      "categoryId": "c928ff67-d86b-4e1b-b46a-73ea614fa1d3",
+      "sku": "ACME-WIDGET-001",
+      "name": "Wireless Ergonomic Keyboard",
+      "description": "Premium multi-device keyboard",
+      "unitPrice": 89.99,
+      "costPrice": 45.00,
+      "stockQuantity": 42,
+      "reorderLevel": 10,
+      "status": "ACTIVE",
+      "stockStatus": "IN_STOCK",
+      "category": {
+        "id": "c928ff67-d86b-4e1b-b46a-73ea614fa1d3",
+        "name": "Electronics"
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+#### `POST /api/v1/products`
+Creates a new product within the caller's tenant. Protected by `requireRole(['ADMIN', 'MANAGER'])`.
+
+- **Request Body**:
+```json
+{
+  "sku": "ACME-AUDIO-PRO",
+  "name": "Studio Monitor Speakers",
+  "description": "Nearfield reference monitors",
+  "unitPrice": 249.99,
+  "costPrice": 140.00,
+  "stockQuantity": 25,
+  "reorderLevel": 5,
+  "categoryId": "c928ff67-d86b-4e1b-b46a-73ea614fa1d3"
+}
+```
+- **Response (201 Created)**: Returns the persisted product entity.
+
+#### `PATCH /api/v1/products/:id`
+Updates product metadata or base unit price. Protected by `requireRole(['ADMIN', 'MANAGER'])`. Cashiers receive `403 Forbidden`.
+
+#### `PATCH /api/v1/products/:id/stock`
+Adjusts inventory stock counts (+ or -) with database constraint verification. Protected by `requireRole(['ADMIN', 'MANAGER'])`. Rejects any adjustment that results in negative stock.
+
+- **Request Body**:
+```json
+{
+  "adjustmentQuantity": -5
+}
+```
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
+    "sku": "ACME-WIDGET-001",
+    "previousStock": 42,
+    "adjustmentQuantity": -5,
+    "newStock": 37
+  }
+}
+```
+
+#### `DELETE /api/v1/products/:id`
+Soft-archives or deletes an unreferenced product. Protected by `requireRole(['ADMIN', 'MANAGER'])`.
+
+---
+
+### 6.3 Concurrency-Safe Checkout (`/api/v1/orders`)
+
+#### `POST /api/v1/orders`
+Executes an atomic, concurrency-safe checkout with row-level locks. Protected by `requireRole(['ADMIN', 'MANAGER', 'CASHIER'])`.
+
+- **Request Body**:
+```json
+{
+  "customerName": "Alice Johnson",
+  "customerEmail": "alice@example.com",
+  "items": [
+    {
+      "productId": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
+      "quantity": 2
+    }
+  ],
+  "notes": "Express POS checkout"
+}
+```
+- **Response (201 Created)**:
+```json
+{
+  "success": true,
+  "data": {
+    "order": {
+      "id": "673f4e85-b9f1-4df2-a3ce-7fbf49db96d1",
+      "orderNumber": "ORD-1788617466100-542",
+      "customerName": "Alice Johnson",
+      "customerEmail": "alice@example.com",
+      "subtotal": 179.98,
+      "taxAmount": 15.97,
+      "totalAmount": 195.95,
+      "status": "COMPLETED",
+      "createdAt": "2026-09-05T14:11:06.100Z",
+      "items": [
+        {
+          "id": "e81d77a2-f8c7-4340-9a4d-0805c862bc38",
+          "productId": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
+          "sku": "ACME-WIDGET-001",
+          "name": "Wireless Ergonomic Keyboard",
+          "quantity": 2,
+          "unitPrice": 89.99,
+          "totalPrice": 179.98
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+### 6.4 Standardized Error Response Structures
+
+StockPulse returns consistent, machine-readable JSON error payloads across all failure states:
+
+#### 1. `400 Bad Request` (Zod Schema Validation Failure)
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed for one or more fields",
+    "details": [
+      {
+        "field": "unitPrice",
+        "message": "Unit price must be strictly greater than 0"
+      }
+    ]
+  }
+}
+```
+
+#### 2. `401 Unauthorized` (Missing or Invalid Authentication)
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication token missing or invalid"
+  }
+}
+```
+
+#### 3. `403 Forbidden` (RBAC Least Privilege Violation)
+```json
+{
+  "success": false,
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Access denied: Required role(s): ADMIN, MANAGER. Your role: CASHIER"
+  }
+}
+```
+
+#### 4. `409 Conflict` (Concurrent Inventory Shortage)
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INSUFFICIENT_STOCK",
+    "message": "One or more items do not have sufficient stock to complete this order",
+    "details": [
+      {
+        "productId": "cb129320-d463-43e9-926f-3ab1835d566d",
+        "sku": "RACE-SEC-001",
+        "name": "Limited Edition Mechanical Switch",
+        "availableStock": 1,
+        "requestedQuantity": 2
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 7. Concurrency-Safe Checkout Engine (`SELECT ... FOR UPDATE`)
+
+### The Problem: Naive Read-Modify-Write Race Conditions
+Under high-volume POS and B2B checkout traffic (e.g., flash sales, wholesale ordering), multiple cashiers or API clients frequently purchase the same SKU simultaneously.
+
+In a standard ORM or unhardened application:
+1. **Request 1** reads: `Stock = 2`.
+2. **Request 2** reads: `Stock = 2`.
+3. **Request 1** computes `2 - 2 = 0` and writes `Stock = 0`.
+4. **Request 2** computes `2 - 2 = 0` and writes `Stock = 0`.
+5. **Outcome**: 4 units were sold when only 2 existed. If a database check constraint exists, Request 2 crashes with a cryptic SQL failure; without it, the database enters negative inventory, resulting in catastrophic physical overselling.
+
+### The Solution: Deadlock-Free Pessimistic Row-Locking
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor POS_1 as Cashier Terminal 1 (Req 1)
+    actor POS_2 as Cashier Terminal 2 (Req 2)
+    participant Engine as Order Engine (Express API)
+    participant PG as PostgreSQL (Storage Engine)
+
+    POS_1->>Engine: POST /api/v1/orders (Qty: 2)
+    POS_2->>Engine: POST /api/v1/orders (Qty: 2)
+    
+    rect rgb(30, 45, 60)
+    Note over Engine,PG: BEGIN TRANSACTION (Tx 1 & Tx 2)
+    Engine->>PG: Tx 1: SELECT ... WHERE id IN (...) FOR UPDATE
+    Engine->>PG: Tx 2: SELECT ... WHERE id IN (...) FOR UPDATE
+    Note over PG: PG locks row for Tx 1.<br/>Tx 2 blocks and waits.
+    end
+
+    Note over Engine: Tx 1 verifies: Stock(2) >= 2 ✅
+    Engine->>PG: Tx 1: UPDATE products SET stock_quantity = stock_quantity - 2 (New: 0)
+    Engine->>PG: Tx 1: INSERT INTO orders & order_items
+    Engine->>PG: Tx 1: COMMIT
+    Note over PG: Tx 1 committed. Lock released!
+
+    rect rgb(60, 30, 30)
+    Note over PG: Tx 2 acquires lock and reads committed state: Stock = 0
+    Note over Engine: Tx 2 evaluates: Stock(0) < 2 ❌ SHORTAGE!
+    Engine->>PG: Tx 2: ROLLBACK
+    Engine-->>POS_2: HTTP 409 Conflict (Itemized Shortage Payload)
+    end
+
+    Engine-->>POS_1: HTTP 201 Created (Receipt & Order Items)
+```
+
+### Architectural Pillars:
+1. **Sorted Primary Keys Prevent Deadlocks**:
+   When orders request multiple distinct products (`[P1, P2]` vs `[P2, P1]`), concurrent transactions locking rows in differing orders can trigger PostgreSQL Deadlock Exceptions (`40P01`). StockPulse deterministically sorts all requested product UUIDs alphabetically before executing the row lock:
+   ```sql
+   SELECT id, name, sku, unit_price, stock_quantity, status
+   FROM "products"
+   WHERE id = ANY($1::uuid[]) AND organization_id = $2::uuid
+   ORDER BY id ASC
+   FOR UPDATE;
+   ```
+2. **Immediate Pre-Write Stock Evaluation**:
+   The engine checks `availableStock >= requestedQuantity` for all lines within the active lock. If any shortage is detected, the transaction aborts with an immediate `ROLLBACK`, guaranteeing zero phantom writes.
+3. **Fixed Decimal Arithmetic**:
+   Tax calculations (8.875% standard commercial rate) use fixed decimal arithmetic (`Math.round(...) / 100`) rather than raw floating-point operations to prevent IEEE-754 rounding drift.
+4. **Database CHECK Constraint (`CHECK stock_quantity >= 0`)**:
+   Acts as the ultimate defensive backstop. Even if an application bug bypasses validation, PostgreSQL immediately rejects any operation that would result in negative inventory.
+
+---
+
+## 8. Seed Accounts
 
 All accounts are pre-seeded with bcrypt-hashed passwords (10 salt rounds): **`StockPulse2026!`**.
 
@@ -325,3 +651,4 @@ All accounts are pre-seeded with bcrypt-hashed passwords (10 salt rounds): **`St
 
 ## License
 ISC License. Built for high-reliability multi-tenant supply chain and B2B point-of-sale infrastructure.
+
