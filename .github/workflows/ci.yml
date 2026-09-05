@@ -38,10 +38,10 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Monorepo Dependencies
@@ -80,28 +80,33 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Run WCAG 2.1 AA Accessibility Verification
-        run: npm run test:a11y
+        working-directory: frontend
+        run: npx tsx scripts/verify-a11y.ts
 
       - name: Deploy PostgreSQL Migrations
-        run: npm run db:migrate --prefix server
+        working-directory: server
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           NODE_ENV: test
 
       - name: Seed Multi-Tenant Organizations & Inventory
-        run: npm run db:seed --prefix server
+        working-directory: server
+        run: npx tsx prisma/seed.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           NODE_ENV: test
 
       - name: Verify Relational Check Constraints
-        run: npm run test:constraints --prefix server
+        working-directory: server
+        run: npx tsx scripts/verify-constraints.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           NODE_ENV: test
 
       - name: Run Phase 2 Security, RBAC & Concurrency Stress Test Suite
-        run: npm run test:phase2 --prefix server
+        working-directory: server
+        run: npx tsx scripts/verify-phase2.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           JWT_SECRET: ${{ env.JWT_SECRET }}
@@ -109,15 +114,23 @@ jobs:
           PORT: 3001
 
       - name: Run Phase 3 Frontend API & POS Integration Test Suite
-        run: npm run test:phase3 --prefix server
+        working-directory: server
+        run: npx tsx scripts/verify-phase3.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           JWT_SECRET: ${{ env.JWT_SECRET }}
           NODE_ENV: test
           PORT: 3001
 
-      - name: Build Production Artifacts (Server & Frontend)
+      - name: Build Production Artifacts (Server)
+        working-directory: server
         run: npm run build
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_ENV: production
+
+      - name: Build Production Artifacts (Frontend)
+        working-directory: frontend
+        run: npm run build
+        env:
           NODE_ENV: production
