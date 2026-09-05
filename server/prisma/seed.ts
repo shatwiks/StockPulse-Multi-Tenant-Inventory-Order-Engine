@@ -3,11 +3,12 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 const DEFAULT_PASSWORD = 'StockPulse2026!';
-const defaultPasswordHash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
+const BCRYPT_SALT_ROUNDS = 10;
+const defaultPasswordHash = bcrypt.hashSync(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
 async function cleanExistingData() {
   console.log('🧹 Cleaning existing test organizations data (if any)...');
-  const testSlugs = ['aeroshield-dynamics', 'biovanguard-diagnostics'];
+  const testSlugs = ['acme-retail', 'summit-supplies', 'aeroshield-dynamics', 'biovanguard-diagnostics'];
 
   const existingOrgs = await prisma.organization.findMany({
     where: { slug: { in: testSlugs } },
@@ -16,7 +17,6 @@ async function cleanExistingData() {
 
   if (existingOrgs.length > 0) {
     const orgIds = existingOrgs.map((o) => o.id);
-    // Due to ON DELETE CASCADE on organization_id, deleting the organization deletes all owned entities
     await prisma.organization.deleteMany({
       where: { id: { in: orgIds } },
     });
@@ -24,28 +24,28 @@ async function cleanExistingData() {
   }
 }
 
-async function seedOrganization1() {
-  console.log('\n🚀 [Org 1] Seeding AeroShield Dynamics (Aerospace & Precision Components)...');
+async function seedAcmeRetail() {
+  console.log('\n🏬 [Tenant 1] Seeding Acme Retail...');
 
   return await prisma.$transaction(async (tx) => {
     // 1. Create Organization
     const org = await tx.organization.create({
       data: {
-        name: 'AeroShield Dynamics Corp.',
-        slug: 'aeroshield-dynamics',
+        name: 'Acme Retail',
+        slug: 'acme-retail',
         currency: 'USD',
         status: OrganizationStatus.ACTIVE,
       },
     });
 
-    // 2. Create Users
+    // 2. Create Users (ADMIN, MANAGER, CASHIER)
     const users = await Promise.all([
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'sarah.chen@aeroshield.io',
-          firstName: 'Sarah',
-          lastName: 'Chen',
+          email: 'admin@acme-retail.com',
+          firstName: 'Alice',
+          lastName: 'Morgan',
           passwordHash: defaultPasswordHash,
           role: UserRole.ADMIN,
           isActive: true,
@@ -54,249 +54,220 @@ async function seedOrganization1() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'marcus.vance@aeroshield.io',
-          firstName: 'Marcus',
-          lastName: 'Vance',
+          email: 'manager@acme-retail.com',
+          firstName: 'Bob',
+          lastName: 'Miller',
           passwordHash: defaultPasswordHash,
-          role: UserRole.CASHIER,
+          role: UserRole.MANAGER,
           isActive: true,
         },
       }),
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'elena.rostova@aeroshield.io',
-          firstName: 'Elena',
-          lastName: 'Rostova',
+          email: 'cashier@acme-retail.com',
+          firstName: 'Charlie',
+          lastName: 'Davis',
           passwordHash: defaultPasswordHash,
-          role: UserRole.MANAGER,
+          role: UserRole.CASHIER,
           isActive: true,
         },
       }),
     ]);
 
-    // 3. Create Hierarchical Categories
-    const catAvionics = await tx.category.create({
+    // 3. Create Categories
+    const catElectronics = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Avionics & Telemetry',
-        slug: 'aeroshield-avionics',
-        description: 'Guidance, inertial navigation, and telemetry sensors for aerospace systems',
+        name: 'Consumer Electronics',
+        slug: 'acme-electronics',
+        description: 'Audio, accessories, and portable electronics',
       },
     });
 
-    const catSensors = await tx.category.create({
+    const catApparel = await tx.category.create({
       data: {
         organizationId: org.id,
-        parentId: catAvionics.id,
-        name: 'Inertial Sensors & MEMS',
-        slug: 'aeroshield-inertial-sensors',
-        description: 'Gyroscopes, accelerometers, and IMU subsystems',
+        name: 'Apparel & Uniforms',
+        slug: 'acme-apparel',
+        description: 'Retail and staff apparel',
       },
     });
 
-    const catHardware = await tx.category.create({
+    const catPantry = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Titanium & High-Temp Fasteners',
-        slug: 'aeroshield-fasteners',
-        description: 'MIL-SPEC Titanium Grade 5 and Inconel 718 structural fasteners',
+        name: 'Pantry & Beverages',
+        slug: 'acme-pantry',
+        description: 'Packaged beverages, coffee, and pantry essentials',
       },
     });
 
-    const catThermal = await tx.category.create({
-      data: {
-        organizationId: org.id,
-        name: 'Thermal Protection & Tiles',
-        slug: 'aeroshield-thermal',
-        description: 'Ceramic matrix composite aerogel and high-temperature insulation tiles',
-      },
-    });
+    // 4. Create Products with Varied Stock Levels
+    const products = await Promise.all([
+      // In Stock Items (stock > reorderLevel)
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catElectronics.id,
+          sku: 'ACM-ELC-1001',
+          name: 'Wireless Noise-Cancelling Headphones',
+          description: 'High-fidelity Bluetooth 5.3 headphones with active noise cancellation',
+          unitPrice: 149.99,
+          costPrice: 85.0,
+          stockQuantity: 45, // IN STOCK
+          reorderLevel: 10,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catElectronics.id,
+          sku: 'ACM-ELC-1002',
+          name: 'USB-C Fast Charging Hub (65W)',
+          description: 'Multi-port gallium nitride (GaN) fast wall charger with dual Type-C',
+          unitPrice: 39.95,
+          costPrice: 18.5,
+          stockQuantity: 80, // IN STOCK
+          reorderLevel: 15,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      // Low Stock Items (0 < stock <= reorderLevel)
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catApparel.id,
+          sku: 'ACM-APP-2001',
+          name: 'Heavy-Duty Canvas Work Apron',
+          description: 'Water-resistant reinforced canvas apron with leather tool loops',
+          unitPrice: 28.5,
+          costPrice: 12.0,
+          stockQuantity: 4, // LOW STOCK
+          reorderLevel: 10,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catPantry.id,
+          sku: 'ACM-PAN-3001',
+          name: 'Artisan Dark Roast Espresso Beans (1kg)',
+          description: 'Single-origin fair trade whole bean coffee for commercial espresso machines',
+          unitPrice: 24.0,
+          costPrice: 11.25,
+          stockQuantity: 5, // LOW STOCK
+          reorderLevel: 12,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      // Out of Stock Items (stock = 0)
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catElectronics.id,
+          sku: 'ACM-ELC-1003',
+          name: 'Thermal Receipt Printer (Bluetooth)',
+          description: 'High-speed 80mm POS receipt printer with drop-in paper loading',
+          unitPrice: 185.0,
+          costPrice: 110.0,
+          stockQuantity: 0, // OUT OF STOCK
+          reorderLevel: 8,
+          status: ProductStatus.OUT_OF_STOCK,
+        },
+      }),
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catApparel.id,
+          sku: 'ACM-APP-2002',
+          name: 'High-Visibility Safety Vest (Class 2)',
+          description: 'Fluorescent yellow mesh safety vest with 2-inch reflective stripes',
+          unitPrice: 16.5,
+          costPrice: 6.8,
+          stockQuantity: 0, // OUT OF STOCK
+          reorderLevel: 20,
+          status: ProductStatus.OUT_OF_STOCK,
+        },
+      }),
+    ]);
 
-    // 4. Create Products
-    const productsData = [
-      {
-        categoryId: catSensors.id,
-        sku: 'ASD-SEN-9100',
-        name: 'Tri-Axis MEMS Inertial Rate Gyroscope Assembly',
-        description: 'Space-qualified angular velocity sensor module with low drift and SPI/CAN bus interface.',
-        unitPrice: 1450.0,
-        costPrice: 890.0,
-        stockQuantity: 85,
-        reorderPoint: 15,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catSensors.id,
-        sku: 'ASD-SEN-9250',
-        name: 'High-G Precision Triaxial Accelerometer Transducer',
-        description: 'Hermetically sealed 500g dynamic accelerometer for atmospheric re-entry telemetry.',
-        unitPrice: 820.0,
-        costPrice: 460.0,
-        stockQuantity: 140,
-        reorderPoint: 20,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catHardware.id,
-        sku: 'ASD-FST-4010',
-        name: 'Grade 5 Titanium Hex Flange Bolts (M8 x 40mm, Pack of 50)',
-        description: 'Ti-6Al-4V fasteners meeting AMS4928 spec for airframe and propulsion mounting.',
-        unitPrice: 260.0,
-        costPrice: 135.0,
-        stockQuantity: 650,
-        reorderPoint: 100,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catHardware.id,
-        sku: 'ASD-FST-8820',
-        name: 'Inconel 718 Self-Locking Reduced Hex Nuts (Pack of 100)',
-        description: 'Extreme-temperature nickel superalloy nuts rated up to 650°C continuous service.',
-        unitPrice: 380.0,
-        costPrice: 210.0,
-        stockQuantity: 420,
-        reorderPoint: 75,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catThermal.id,
-        sku: 'ASD-THM-1050',
-        name: 'Rigid Ceramic Aerogel Thermal Barrier Tile (300mm x 300mm)',
-        description: 'Low-density refractory composite thermal barrier designed for 1400°C peak gradient.',
-        unitPrice: 620.0,
-        costPrice: 340.0,
-        stockQuantity: 45,
-        reorderPoint: 10,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catThermal.id,
-        sku: 'ASD-THM-2010',
-        name: 'Silica-Fiber Flexible Insulation Blanket (1000mm x 500mm)',
-        description: 'High-purity silica needle-felt blanket for rocket nozzle nacelle thermal insulation.',
-        unitPrice: 490.0,
-        costPrice: 275.0,
-        stockQuantity: 8, // Low stock demo (< reorderPoint)
-        reorderPoint: 15,
-        status: ProductStatus.ACTIVE,
-      },
-    ];
-
-    const products = await Promise.all(
-      productsData.map((p) =>
-        tx.product.create({
-          data: {
-            organizationId: org.id,
-            categoryId: p.categoryId,
-            sku: p.sku,
-            name: p.name,
-            description: p.description,
-            unitPrice: p.unitPrice,
-            costPrice: p.costPrice,
-            stockQuantity: p.stockQuantity,
-            reorderPoint: p.reorderPoint,
-            status: p.status,
-          },
-        })
-      )
-    );
-
-    // 5. Create Realistic Orders with Order Items
-    // Order 1: Delivered
+    // 5. Create Orders (COMPLETED, HELD, CANCELLED)
     const order1 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-ASD-2026-0001',
-        customerName: 'Lockheed Space Systems',
-        customerEmail: 'procurement@lockheed-space.demo',
-        status: OrderStatus.DELIVERED,
-        totalAmount: 1450.0 * 20 + 620.0 * 10, // $35,200.00
-        notes: 'Priority defense contractor delivery via secure courier. Inspection certificate attached.',
+        orderNumber: 'ORD-ACM-2026-0001',
+        customerName: 'Cornerstone Hospitality LLC',
+        customerEmail: 'purchasing@cornerstone-hospitality.demo',
+        status: OrderStatus.COMPLETED,
+        totalAmount: 379.88,
+        taxAmount: 30.98,
+        notes: 'Delivered to main dining room store counter.',
         items: {
           create: [
             {
               organizationId: org.id,
-              productId: products[0].id, // ASD-SEN-9100
-              quantity: 20,
-              unitPrice: 1450.0,
-              totalPrice: 29000.0,
+              productId: products[0].id,
+              quantity: 2,
+              unitPrice: 149.99,
+              totalPrice: 299.98,
             },
             {
               organizationId: org.id,
-              productId: products[4].id, // ASD-THM-1050
-              quantity: 10,
-              unitPrice: 620.0,
-              totalPrice: 6200.0,
+              productId: products[1].id,
+              quantity: 2,
+              unitPrice: 39.95,
+              totalPrice: 79.9,
             },
           ],
         },
       },
     });
 
-    // Order 2: Processing
     const order2 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-ASD-2026-0002',
-        customerName: 'Blue Horizon Orbital',
-        customerEmail: 'supply@bluehorizon.demo',
-        status: OrderStatus.PROCESSING,
-        totalAmount: 820.0 * 5 + 260.0 * 8 + 380.0 * 5, // $8,080.00
-        notes: 'Commercial satellite constellation batch 4 hardware requirements.',
+        orderNumber: 'ORD-ACM-2026-0002',
+        customerName: 'Metro Cafe & Roastery',
+        customerEmail: 'orders@metrocafe.demo',
+        status: OrderStatus.HELD,
+        totalAmount: 72.0,
+        taxAmount: 5.87,
+        notes: 'Held at register counter pending customer return from warehouse aisle.',
         items: {
           create: [
             {
               organizationId: org.id,
-              productId: products[1].id, // ASD-SEN-9250
-              quantity: 5,
-              unitPrice: 820.0,
-              totalPrice: 4100.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[2].id, // ASD-FST-4010
-              quantity: 8,
-              unitPrice: 260.0,
-              totalPrice: 2080.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[3].id, // ASD-FST-8820
-              quantity: 5,
-              unitPrice: 380.0,
-              totalPrice: 1900.0,
+              productId: products[3].id,
+              quantity: 3,
+              unitPrice: 24.0,
+              totalPrice: 72.0,
             },
           ],
         },
       },
     });
 
-    // Order 3: Pending
     const order3 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-ASD-2026-0003',
-        customerName: 'Raytheon Defense Systems',
-        customerEmail: 'purchasing@raytheon-def.demo',
-        status: OrderStatus.PENDING,
-        totalAmount: 1450.0 * 2 + 490.0 * 4, // $4,860.00
-        notes: 'Awaiting export control ITAR end-user sign-off before warehouse pick.',
+        orderNumber: 'ORD-ACM-2026-0003',
+        customerName: 'Highland Hotel & Suites',
+        customerEmail: 'ops@highlandsuites.demo',
+        status: OrderStatus.CANCELLED,
+        totalAmount: 185.0,
+        taxAmount: 15.08,
+        notes: 'Order cancelled due to thermal printer supplier backorder.',
         items: {
           create: [
             {
               organizationId: org.id,
-              productId: products[0].id, // ASD-SEN-9100
-              quantity: 2,
-              unitPrice: 1450.0,
-              totalPrice: 2900.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[5].id, // ASD-THM-2010
-              quantity: 4,
-              unitPrice: 490.0,
-              totalPrice: 1960.0,
+              productId: products[4].id,
+              quantity: 1,
+              unitPrice: 185.0,
+              totalPrice: 185.0,
             },
           ],
         },
@@ -305,36 +276,35 @@ async function seedOrganization1() {
 
     return {
       org,
-      userCount: users.length,
-      categoryCount: 4,
-      productCount: products.length,
-      orderCount: 3,
+      users,
+      products,
+      orders: [order1, order2, order3],
     };
   });
 }
 
-async function seedOrganization2() {
-  console.log('\n🧬 [Org 2] Seeding BioVanguard Diagnostics (Life Sciences & Lab Consumables)...');
+async function seedSummitSupplies() {
+  console.log('\n🏔️  [Tenant 2] Seeding Summit Supplies...');
 
   return await prisma.$transaction(async (tx) => {
     // 1. Create Organization
     const org = await tx.organization.create({
       data: {
-        name: 'BioVanguard Diagnostics S.A.',
-        slug: 'biovanguard-diagnostics',
-        currency: 'EUR',
+        name: 'Summit Supplies',
+        slug: 'summit-supplies',
+        currency: 'USD',
         status: OrganizationStatus.ACTIVE,
       },
     });
 
-    // 2. Create Users
+    // 2. Create Users (ADMIN, MANAGER, CASHIER)
     const users = await Promise.all([
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'arun.patel@biovanguard.eu',
-          firstName: 'Arun',
-          lastName: 'Patel',
+          email: 'admin@summit-supplies.com',
+          firstName: 'David',
+          lastName: 'Kim',
           passwordHash: defaultPasswordHash,
           role: UserRole.ADMIN,
           isActive: true,
@@ -343,9 +313,9 @@ async function seedOrganization2() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'chloe.dubois@biovanguard.eu',
-          firstName: 'Chloé',
-          lastName: 'Dubois',
+          email: 'manager@summit-supplies.com',
+          firstName: 'Emily',
+          lastName: 'Watson',
           passwordHash: defaultPasswordHash,
           role: UserRole.MANAGER,
           isActive: true,
@@ -354,9 +324,9 @@ async function seedOrganization2() {
       tx.user.create({
         data: {
           organizationId: org.id,
-          email: 'hannah.schmidt@biovanguard.eu',
-          firstName: 'Hannah',
-          lastName: 'Schmidt',
+          email: 'cashier@summit-supplies.com',
+          firstName: 'Frank',
+          lastName: 'Castle',
           passwordHash: defaultPasswordHash,
           role: UserRole.CASHIER,
           isActive: true,
@@ -364,219 +334,131 @@ async function seedOrganization2() {
       }),
     ]);
 
-    // 3. Create Hierarchical Categories
-    const catMolecular = await tx.category.create({
+    // 3. Create Categories
+    const catHardware = await tx.category.create({
       data: {
         organizationId: org.id,
-        name: 'Molecular Diagnostics & PCR',
-        slug: 'biovanguard-molecular',
-        description: 'Assays, polymerases, and qPCR amplification kits for diagnostic pathology',
+        name: 'Hardware & Fasteners',
+        slug: 'summit-hardware',
+        description: 'Industrial fasteners, anchors, and brackets',
       },
     });
 
-    const catEnzymes = await tx.category.create({
+    const catSafety = await tx.category.create({
       data: {
         organizationId: org.id,
-        parentId: catMolecular.id,
-        name: 'Cold-Chain Enzymes & Reagents',
-        slug: 'biovanguard-enzymes',
-        description: 'Enzymes stored at -20°C requiring cold-chain temperature validation',
+        name: 'Safety & PPE',
+        slug: 'summit-safety',
+        description: 'Industrial helmets, eyewear, and respirators',
       },
     });
 
-    const catAutomation = await tx.category.create({
-      data: {
-        organizationId: org.id,
-        name: 'Robotic Liquid Handler Consumables',
-        slug: 'biovanguard-automation',
-        description: 'Certified RNase/DNase-free filtered tips and SBS-standard microplates',
-      },
-    });
+    // 4. Create Products with Varied Stock Levels
+    const products = await Promise.all([
+      // In Stock Items
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catHardware.id,
+          sku: 'SMT-HDW-4001',
+          name: 'Galvanized Hex Head Bolt Set (Grade 8)',
+          description: 'High-tensile Grade 8 galvanized steel bolts with nylon lock nuts (Pack of 100)',
+          unitPrice: 42.5,
+          costPrice: 21.0,
+          stockQuantity: 120, // IN STOCK
+          reorderLevel: 25,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catSafety.id,
+          sku: 'SMT-SAF-5001',
+          name: 'ANSI Z87.1 Anti-Fog Safety Glasses',
+          description: 'Scratch-resistant polycarbonate wraparound protective eye shield',
+          unitPrice: 12.99,
+          costPrice: 4.8,
+          stockQuantity: 65, // IN STOCK
+          reorderLevel: 15,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      // Low Stock Items
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catSafety.id,
+          sku: 'SMT-SAF-5002',
+          name: 'Dual-Cartridge Half-Mask Respirator (N95)',
+          description: 'Ergonomic silicone face seal respirator with replaceable particulate filters',
+          unitPrice: 48.0,
+          costPrice: 26.5,
+          stockQuantity: 3, // LOW STOCK
+          reorderLevel: 10,
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+      // Out of Stock Items
+      tx.product.create({
+        data: {
+          organizationId: org.id,
+          categoryId: catHardware.id,
+          sku: 'SMT-HDW-4002',
+          name: 'Pneumatic Framing Nailer (21 Degree)',
+          description: 'Heavy-duty magazine framing nailer for timber construction',
+          unitPrice: 229.0,
+          costPrice: 145.0,
+          stockQuantity: 0, // OUT OF STOCK
+          reorderLevel: 5,
+          status: ProductStatus.OUT_OF_STOCK,
+        },
+      }),
+    ]);
 
-    // 4. Create Products
-    const productsData = [
-      {
-        categoryId: catMolecular.id,
-        sku: 'BVD-PCR-2001',
-        name: 'UltraPure Taq 2X Master Mix (1000 Reactions)',
-        description: 'Ready-to-use qPCR master mix with hot-start Taq polymerase and dNTPs.',
-        unitPrice: 340.0,
-        costPrice: 145.0,
-        stockQuantity: 210,
-        reorderPoint: 30,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catMolecular.id,
-        sku: 'BVD-PCR-4050',
-        name: 'Multiplex One-Step RT-qPCR Viral Detection Kit',
-        description: 'Clinical diagnostic reverse transcriptase qPCR assay with internal extraction control.',
-        unitPrice: 890.0,
-        costPrice: 410.0,
-        stockQuantity: 65,
-        reorderPoint: 15,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catEnzymes.id,
-        sku: 'BVD-ENZ-0120',
-        name: 'Recombinant Proteinase K Lyophilized (100mg)',
-        description: 'High-activity endopeptidase for nucleic acid purification and viral lysis.',
-        unitPrice: 175.0,
-        costPrice: 68.0,
-        stockQuantity: 350,
-        reorderPoint: 50,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catAutomation.id,
-        sku: 'BVD-AUT-9600',
-        name: 'Robotic Filter Tips 200µL (96-Well Rack, 10 Racks/Box)',
-        description: 'Sterile, aerosol-barrier pipette tips compatible with Hamilton & Tecan automation.',
-        unitPrice: 115.0,
-        costPrice: 42.0,
-        stockQuantity: 580,
-        reorderPoint: 100,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catAutomation.id,
-        sku: 'BVD-AUT-3840',
-        name: 'Deep-Well Microplates 384-Well Polypropylene (Box of 50)',
-        description: 'Virgin polypropylene SBS-format deep well plates for automated high-throughput screening.',
-        unitPrice: 210.0,
-        costPrice: 85.0,
-        stockQuantity: 175,
-        reorderPoint: 25,
-        status: ProductStatus.ACTIVE,
-      },
-      {
-        categoryId: catEnzymes.id,
-        sku: 'BVD-CRYO-0080',
-        name: 'Cold-Chain Data Logger Bluetooth Probe (-80°C to +40°C)',
-        description: 'NIST-traceable calibration temperature monitor included inside transport shippers.',
-        unitPrice: 95.0,
-        costPrice: 45.0,
-        stockQuantity: 120,
-        reorderPoint: 20,
-        status: ProductStatus.ACTIVE,
-      },
-    ];
-
-    const products = await Promise.all(
-      productsData.map((p) =>
-        tx.product.create({
-          data: {
-            organizationId: org.id,
-            categoryId: p.categoryId,
-            sku: p.sku,
-            name: p.name,
-            description: p.description,
-            unitPrice: p.unitPrice,
-            costPrice: p.costPrice,
-            stockQuantity: p.stockQuantity,
-            reorderPoint: p.reorderPoint,
-            status: p.status,
-          },
-        })
-      )
-    );
-
-    // 5. Create Realistic Orders with Order Items
-    // Order 1: Shipped
+    // 5. Create Orders (COMPLETED, HELD)
     const order1 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-BVD-2026-0001',
-        customerName: 'Charité University Hospital Berlin',
-        customerEmail: 'procurement@charite.demo',
-        status: OrderStatus.SHIPPED,
-        totalAmount: 890.0 * 10 + 340.0 * 25, // €17,400.00
-        notes: 'Maintain dry ice cold pack transit temperature throughout courier shipping.',
+        orderNumber: 'ORD-SMT-2026-0001',
+        customerName: 'Apex Construction Partners',
+        customerEmail: 'supply@apexconstruct.demo',
+        status: OrderStatus.COMPLETED,
+        totalAmount: 170.0,
+        taxAmount: 13.85,
+        notes: 'Job site #4 delivery confirmed.',
         items: {
           create: [
             {
               organizationId: org.id,
-              productId: products[1].id, // BVD-PCR-4050
-              quantity: 10,
-              unitPrice: 890.0,
-              totalPrice: 8900.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[0].id, // BVD-PCR-2001
-              quantity: 25,
-              unitPrice: 340.0,
-              totalPrice: 8500.0,
+              productId: products[0].id,
+              quantity: 4,
+              unitPrice: 42.5,
+              totalPrice: 170.0,
             },
           ],
         },
       },
     });
 
-    // Order 2: Processing
     const order2 = await tx.order.create({
       data: {
         organizationId: org.id,
-        orderNumber: 'ORD-BVD-2026-0002',
-        customerName: 'Institut Pasteur Paris',
-        customerEmail: 'lab-orders@pasteur.demo',
-        status: OrderStatus.PROCESSING,
-        totalAmount: 175.0 * 15 + 115.0 * 30, // €6,075.00
-        notes: 'Scheduled for batch preparation in clean room facility.',
+        orderNumber: 'ORD-SMT-2026-0002',
+        customerName: 'Vanguard Industrial Services',
+        customerEmail: 'safety@vanguard-ind.demo',
+        status: OrderStatus.HELD,
+        totalAmount: 96.0,
+        taxAmount: 7.82,
+        notes: 'Pending purchase order verification from safety department.',
         items: {
           create: [
             {
               organizationId: org.id,
-              productId: products[2].id, // BVD-ENZ-0120
-              quantity: 15,
-              unitPrice: 175.0,
-              totalPrice: 2625.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[3].id, // BVD-AUT-9600
-              quantity: 30,
-              unitPrice: 115.0,
-              totalPrice: 3450.0,
-            },
-          ],
-        },
-      },
-    });
-
-    // Order 3: Pending
-    const order3 = await tx.order.create({
-      data: {
-        organizationId: org.id,
-        orderNumber: 'ORD-BVD-2026-0003',
-        customerName: 'Karolinska Institutet Stockholm',
-        customerEmail: 'diagnostics@ki.demo',
-        status: OrderStatus.PENDING,
-        totalAmount: 340.0 * 5 + 210.0 * 12 + 95.0 * 10, // €5,170.00
-        notes: 'Consignment order for molecular biology core testing facility.',
-        items: {
-          create: [
-            {
-              organizationId: org.id,
-              productId: products[0].id, // BVD-PCR-2001
-              quantity: 5,
-              unitPrice: 340.0,
-              totalPrice: 1700.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[4].id, // BVD-AUT-3840
-              quantity: 12,
-              unitPrice: 210.0,
-              totalPrice: 2520.0,
-            },
-            {
-              organizationId: org.id,
-              productId: products[5].id, // BVD-CRYO-0080
-              quantity: 10,
-              unitPrice: 95.0,
-              totalPrice: 950.0,
+              productId: products[2].id,
+              quantity: 2,
+              unitPrice: 48.0,
+              totalPrice: 96.0,
             },
           ],
         },
@@ -585,43 +467,40 @@ async function seedOrganization2() {
 
     return {
       org,
-      userCount: users.length,
-      categoryCount: 3,
-      productCount: products.length,
-      orderCount: 3,
+      users,
+      products,
+      orders: [order1, order2],
     };
   });
 }
 
 async function main() {
   console.log('===============================================================');
-  console.log('🌱 StockPulse Multi-Tenant B2B Database Seeder');
+  console.log('🌱 StockPulse Multi-Tenant Enterprise Database Seeder');
   console.log('===============================================================');
 
   await cleanExistingData();
-
-  const org1 = await seedOrganization1();
-  const org2 = await seedOrganization2();
+  const acme = await seedAcmeRetail();
+  const summit = await seedSummitSupplies();
 
   console.log('\n===============================================================');
   console.log('✅ Seeding Completed Successfully!');
   console.log('===============================================================');
-  console.log(`🏢 Organization 1: ${org1.org.name} (${org1.org.slug})`);
-  console.log(`   - Users: ${org1.userCount}`);
-  console.log(`   - Categories: ${org1.categoryCount}`);
-  console.log(`   - Products: ${org1.productCount}`);
-  console.log(`   - Orders: ${org1.orderCount}`);
-  console.log(`\n🏢 Organization 2: ${org2.org.name} (${org2.org.slug})`);
-  console.log(`   - Users: ${org2.userCount}`);
-  console.log(`   - Categories: ${org2.categoryCount}`);
-  console.log(`   - Products: ${org2.productCount}`);
-  console.log(`   - Orders: ${org2.orderCount}`);
+  console.log(`🏢 Organization 1: ${acme.org.name} (${acme.org.slug})`);
+  console.log(`   - Users: ${acme.users.length} (Admin: admin@acme-retail.com, Password: ${DEFAULT_PASSWORD})`);
+  console.log(`   - Products: ${acme.products.length} (In Stock, Low Stock, Out of Stock)`);
+  console.log(`   - Orders: ${acme.orders.length}`);
+
+  console.log(`\n🏢 Organization 2: ${summit.org.name} (${summit.org.slug})`);
+  console.log(`   - Users: ${summit.users.length} (Admin: admin@summit-supplies.com, Password: ${DEFAULT_PASSWORD})`);
+  console.log(`   - Products: ${summit.products.length} (In Stock, Low Stock, Out of Stock)`);
+  console.log(`   - Orders: ${summit.orders.length}`);
   console.log('===============================================================');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error while seeding database:', e);
+    console.error('❌ Seeding failed:', e);
     process.exit(1);
   })
   .finally(async () => {

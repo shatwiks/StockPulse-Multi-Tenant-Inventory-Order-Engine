@@ -31,11 +31,8 @@ enum ProductStatus {
 }
 
 enum OrderStatus {
-  PENDING
-  CONFIRMED
-  PROCESSING
-  SHIPPED
-  DELIVERED
+  COMPLETED
+  HELD
   CANCELLED
 }
 
@@ -72,9 +69,9 @@ model User {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   email        String   @db.VarChar(255)
-  firstName    String   @map("first_name") @db.VarChar(100)
-  lastName     String   @map("last_name") @db.VarChar(100)
-  passwordHash String?  @map("password_hash") @db.VarChar(255)
+  firstName    String   @default("") @map("first_name") @db.VarChar(100)
+  lastName     String   @default("") @map("last_name") @db.VarChar(100)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
   role         UserRole @default(CASHIER)
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -86,7 +83,7 @@ model User {
 }
 
 // -----------------------------------------------------------------------------
-// 3. Categories (Tenant-Owned Hierarchical Taxonomy)
+// 3. Categories (Tenant-Owned Taxonomy)
 // -----------------------------------------------------------------------------
 
 model Category {
@@ -94,15 +91,11 @@ model Category {
   organizationId String       @map("organization_id") @db.Uuid
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  parentId    String?    @map("parent_id") @db.Uuid
-  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Category[] @relation("CategoryHierarchy")
-
-  name        String     @db.VarChar(150)
-  slug        String     @db.VarChar(150)
-  description String?    @db.Text
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  name        String    @db.VarChar(150)
+  slug        String    @default("") @db.VarChar(150)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   products Product[]
 
@@ -126,10 +119,10 @@ model Product {
   sku           String        @db.VarChar(100)
   name          String        @db.VarChar(255)
   description   String?       @db.Text
-  unitPrice     Decimal       @map("unit_price") @db.Decimal(12, 2)
-  costPrice     Decimal       @map("cost_price") @db.Decimal(12, 2)
+  unitPrice     Decimal       @map("unit_price") @db.Decimal(10, 2)
+  costPrice     Decimal?      @map("cost_price") @db.Decimal(10, 2)
   stockQuantity Int           @default(0) @map("stock_quantity")
-  reorderPoint  Int           @default(10) @map("reorder_point")
+  reorderLevel  Int           @default(10) @map("reorder_level")
   status        ProductStatus @default(ACTIVE)
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -161,14 +154,15 @@ model Order {
   organizationId String       @map("organization_id") @db.Uuid
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  orderNumber   String      @map("order_number") @db.VarChar(100)
+  orderNumber   String      @default(dbgenerated("('ORD-' || to_char(now(), 'YYYYMMDD-') || substr(gen_random_uuid()::text, 1, 8))")) @map("order_number") @db.VarChar(100)
   customerName  String      @map("customer_name") @db.VarChar(255)
-  customerEmail String      @map("customer_email") @db.VarChar(255)
-  status        OrderStatus @default(PENDING)
-  totalAmount   Decimal     @default(0) @map("total_amount") @db.Decimal(12, 2)
+  customerEmail String?     @map("customer_email") @db.VarChar(255)
+  totalAmount   Decimal     @default(0) @map("total_amount") @db.Decimal(10, 2)
+  taxAmount     Decimal     @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  status        OrderStatus @default(COMPLETED)
   notes         String?     @db.Text
   createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   items OrderItem[]
 
@@ -188,8 +182,8 @@ model Order {
 
 model OrderItem {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String?      @map("organization_id") @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   orderId String @map("order_id") @db.Uuid
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -198,12 +192,12 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   quantity   Int      @default(1)
-  unitPrice  Decimal  @map("unit_price") @db.Decimal(12, 2)
-  totalPrice Decimal  @map("total_price") @db.Decimal(12, 2)
+  unitPrice  Decimal  @map("unit_price") @db.Decimal(10, 2)
+  totalPrice Decimal  @default(0) @map("total_price") @db.Decimal(10, 2)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@index([organizationId, orderId])
-  @@index([organizationId, productId])
+  @@index([orderId])
+  @@index([productId])
   @@map("order_items")
 }

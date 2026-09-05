@@ -197,16 +197,20 @@ export async function placeOrderHandler(req: Request, res: Response): Promise<Re
           };
         });
 
-        // 7. Generate Orders and Order Items Records
+        // 7. Calculate Grand Total with Tax and Generate Orders Records
+        const taxAmountDecimal = calculatedTotal.mul(0.08875).toDecimalPlaces(2);
+        const grandTotalDecimal = calculatedTotal.add(taxAmountDecimal);
+
         const newOrder = await tx.order.create({
           data: {
             organizationId,
             orderNumber,
             customerName,
-            customerEmail,
-            status: OrderStatus.CONFIRMED,
-            totalAmount: calculatedTotal,
-            notes,
+            customerEmail: customerEmail ?? null,
+            status: OrderStatus.COMPLETED,
+            totalAmount: grandTotalDecimal,
+            taxAmount: taxAmountDecimal,
+            notes: notes ?? null,
             items: {
               create: orderItemsData,
             },

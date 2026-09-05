@@ -11,7 +11,7 @@ CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'MANAGER', 'CASHIER');
 CREATE TYPE "ProductStatus" AS ENUM ('ACTIVE', 'DRAFT', 'DISCONTINUED', 'OUT_OF_STOCK');
 
 -- CreateEnum
-CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+CREATE TYPE "OrderStatus" AS ENUM ('COMPLETED', 'HELD', 'CANCELLED');
 
 -- -----------------------------------------------------------------------------
 -- Table: organizations
@@ -37,9 +37,9 @@ CREATE TABLE "users" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "organization_id" UUID NOT NULL,
     "email" VARCHAR(255) NOT NULL,
-    "first_name" VARCHAR(100) NOT NULL,
-    "last_name" VARCHAR(100) NOT NULL,
-    "password_hash" VARCHAR(255),
+    "first_name" VARCHAR(100) NOT NULL DEFAULT '',
+    "last_name" VARCHAR(100) NOT NULL DEFAULT '',
+    "password_hash" VARCHAR(255) NOT NULL,
     "role" "UserRole" NOT NULL DEFAULT 'CASHIER',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -59,18 +59,15 @@ CREATE INDEX "users_organization_id_role_idx" ON "users"("organization_id", "rol
 CREATE TABLE "categories" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "organization_id" UUID NOT NULL,
-    "parent_id" UUID,
     "name" VARCHAR(150) NOT NULL,
-    "slug" VARCHAR(150) NOT NULL,
+    "slug" VARCHAR(150) NOT NULL DEFAULT '',
     "description" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "categories_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "categories_organization_id_fkey" FOREIGN KEY ("organization_id") 
-        REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "categories_parent_id_fkey" FOREIGN KEY ("parent_id") 
-        REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE
+        REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE UNIQUE INDEX "unique_org_category_slug" ON "categories"("organization_id", "slug");
@@ -86,10 +83,10 @@ CREATE TABLE "products" (
     "sku" VARCHAR(100) NOT NULL,
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT,
-    "unit_price" DECIMAL(12,2) NOT NULL,
-    "cost_price" DECIMAL(12,2) NOT NULL,
+    "unit_price" DECIMAL(10,2) NOT NULL,
+    "cost_price" DECIMAL(10,2),
     "stock_quantity" INTEGER NOT NULL DEFAULT 0,
-    "reorder_point" INTEGER NOT NULL DEFAULT 10,
+    "reorder_level" INTEGER NOT NULL DEFAULT 10,
     "status" "ProductStatus" NOT NULL DEFAULT 'ACTIVE',
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -107,10 +104,10 @@ CREATE TABLE "products" (
 CREATE UNIQUE INDEX "unique_org_sku" ON "products"("organization_id", "sku");
 
 -- Explicit composite indexes:
--- 1. (organization_id, sku)
+-- 1. (organization_id, sku) for fast lookup & tenant uniqueness
 CREATE INDEX "idx_products_org_sku" ON "products"("organization_id", "sku");
 
--- 2. (organization_id, created_at DESC)
+-- 2. (organization_id, created_at DESC) for tenant-isolated pagination
 CREATE INDEX "idx_products_org_created_at_desc" ON "products"("organization_id", "created_at" DESC);
 
 CREATE INDEX "products_organization_id_category_id_idx" ON "products"("organization_id", "category_id");
@@ -124,9 +121,10 @@ CREATE TABLE "orders" (
     "organization_id" UUID NOT NULL,
     "order_number" VARCHAR(100) NOT NULL,
     "customer_name" VARCHAR(255) NOT NULL,
-    "customer_email" VARCHAR(255) NOT NULL,
-    "status" "OrderStatus" NOT NULL DEFAULT 'PENDING',
-    "total_amount" DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    "customer_email" VARCHAR(255),
+    "total_amount" DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    "tax_amount" DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    "status" "OrderStatus" NOT NULL DEFAULT 'COMPLETED',
     "notes" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -138,7 +136,7 @@ CREATE TABLE "orders" (
 
 CREATE UNIQUE INDEX "unique_org_order_number" ON "orders"("organization_id", "order_number");
 
--- Explicit composite index: (organization_id, created_at DESC)
+-- Explicit composite index: (organization_id, created_at DESC) for tenant-isolated pagination
 CREATE INDEX "idx_orders_org_created_at_desc" ON "orders"("organization_id", "created_at" DESC);
 
 CREATE INDEX "orders_organization_id_status_idx" ON "orders"("organization_id", "status");
@@ -148,12 +146,12 @@ CREATE INDEX "orders_organization_id_status_idx" ON "orders"("organization_id", 
 -- -----------------------------------------------------------------------------
 CREATE TABLE "order_items" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "organization_id" UUID NOT NULL,
+    "organization_id" UUID,
     "order_id" UUID NOT NULL,
     "product_id" UUID NOT NULL,
     "quantity" INTEGER NOT NULL DEFAULT 1,
-    "unit_price" DECIMAL(12,2) NOT NULL,
-    "total_price" DECIMAL(12,2) NOT NULL,
+    "unit_price" DECIMAL(10,2) NOT NULL,
+    "total_price" DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -169,5 +167,5 @@ CREATE TABLE "order_items" (
     CONSTRAINT "order_items_quantity_check" CHECK ("quantity" > 0)
 );
 
-CREATE INDEX "order_items_organization_id_order_id_idx" ON "order_items"("organization_id", "order_id");
-CREATE INDEX "order_items_organization_id_product_id_idx" ON "order_items"("organization_id", "product_id");
+CREATE INDEX "order_items_order_id_idx" ON "order_items"("order_id");
+CREATE INDEX "order_items_product_id_idx" ON "order_items"("product_id");

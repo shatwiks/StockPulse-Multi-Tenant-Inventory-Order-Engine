@@ -136,9 +136,12 @@ router.post('/products', async (req, res) => {
       unitPrice,
       costPrice = 0,
       stockQuantity = 0,
-      reorderPoint = 10,
+      reorderLevel,
+      reorderPoint,
       status = 'ACTIVE',
     } = req.body;
+
+    const parsedReorderLevel = Number(reorderLevel ?? reorderPoint ?? 10);
 
     if (!organizationId || !sku || !name || unitPrice === undefined) {
       return res.status(400).json({
@@ -164,7 +167,7 @@ router.post('/products', async (req, res) => {
         unitPrice: Number(unitPrice),
         costPrice: Number(costPrice),
         stockQuantity: Number(stockQuantity),
-        reorderPoint: Number(reorderPoint),
+        reorderLevel: parsedReorderLevel,
         status: Number(stockQuantity) === 0 ? 'OUT_OF_STOCK' : status,
       },
       include: {

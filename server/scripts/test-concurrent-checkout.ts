@@ -96,8 +96,9 @@ async function executeOrderPlacement(input: {
           orderNumber,
           customerName,
           customerEmail,
-          status: OrderStatus.CONFIRMED,
+          status: OrderStatus.COMPLETED,
           totalAmount: calculatedTotal,
+          taxAmount: calculatedTotal.mul(0.08875).toDecimalPlaces(2),
           items: {
             create: itemsData,
           },
@@ -126,14 +127,14 @@ async function runConcurrencyTest() {
 
   // 1. Setup a test product with exactly 10 units in stock
   let org = await prisma.organization.findFirst({
-    where: { slug: 'aeroshield-dynamics' },
+    where: { slug: 'acme-retail' },
   });
 
   if (!org) {
     org = await prisma.organization.create({
       data: {
-        name: 'AeroShield Test Org',
-        slug: 'aeroshield-dynamics',
+        name: 'Acme Retail',
+        slug: 'acme-retail',
         currency: 'USD',
       },
     });
@@ -150,7 +151,7 @@ async function runConcurrencyTest() {
       unitPrice: 500.0,
       costPrice: 250.0,
       stockQuantity: initialStock,
-      reorderPoint: 5,
+      reorderLevel: 5,
     },
   });
 

@@ -30,3 +30,6 @@ yarn-error.log*
 # OS Files
 .DS_Store
 Thumbs.db
+
+# TypeScript build info cache
+*.tsbuildinfo

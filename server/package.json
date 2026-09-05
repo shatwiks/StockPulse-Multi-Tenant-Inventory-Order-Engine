@@ -17,7 +17,7 @@
     "test:checkout": "node ./node_modules/tsx/dist/cli.mjs scripts/test-concurrent-checkout.ts"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node ./node_modules/tsx/dist/cli.mjs prisma/seed.ts"
   },
   "keywords": [
     "multi-tenant",
@@ -33,16 +33,14 @@
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "@tanstack/react-query": "^5.62.7",
     "bcrypt": "npm:bcryptjs@^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
-    "lucide-react": "^0.468.0",
     "pg": "^8.13.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -52,9 +50,8 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.1",
     "@types/pg": "^8.11.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
     "prisma": "^5.22.0",
+    "ts-node-dev": "^2.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
