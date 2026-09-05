@@ -24,7 +24,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d stockpulse_inventory"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
 
     env:
       NODE_ENV: test
@@ -45,10 +45,30 @@ jobs:
           cache: 'npm'
 
       - name: Install Monorepo Dependencies
-        run: npm ci
+        run: |
+          echo "Installing root and workspace dependencies..."
+          npm install --include-workspace-root
+          npm install --prefix server
+          npm install --prefix frontend
 
-      - name: Generate Prisma Client
-        run: npm run db:generate --prefix server
+      - name: Wait for PostgreSQL Readiness
+        run: |
+          echo "Waiting for PostgreSQL service container to accept connections..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres -d stockpulse_inventory; then
+              echo "PostgreSQL is ready and accepting queries!"
+              exit 0
+            fi
+            echo "PostgreSQL is warming up ($i/30)... sleeping 2s"
+            sleep 2
+          done
+          echo "Error: Timed out waiting for PostgreSQL container."
+          exit 1
+
+      - name: Generate Prisma Client (Linux Runner Environment)
+        run: npx prisma generate --schema=server/prisma/schema.prisma
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
 
       - name: Run Strict TypeScript Verification (Server)
         run: npx tsc --noEmit --project server/tsconfig.json
@@ -61,18 +81,40 @@ jobs:
 
       - name: Deploy PostgreSQL Migrations
         run: npm run db:migrate --prefix server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_ENV: test
 
       - name: Seed Multi-Tenant Organizations & Inventory
         run: npm run db:seed --prefix server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_ENV: test
 
       - name: Verify Relational Check Constraints
         run: npm run test:constraints --prefix server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_ENV: test
 
       - name: Run Phase 2 Security, RBAC & Concurrency Stress Test Suite
         run: npm run test:phase2 --prefix server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          NODE_ENV: test
+          PORT: 3001
 
       - name: Run Phase 3 Frontend API & POS Integration Test Suite
         run: npm run test:phase3 --prefix server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          NODE_ENV: test
+          PORT: 3001
 
       - name: Build Production Artifacts (Server & Frontend)
         run: npm run build
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_ENV: production
