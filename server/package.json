@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node -e \"require('typescript/bin/tsc')\"",
     "start": "node --import tsx src/server.ts",
-    "dev": "node --import tsx src/server.ts",
+    "dev": "node --import tsx --watch src/server.ts",
     "db:generate": "node -e \"require('prisma/build/index.js')\" generate",
     "db:migrate": "node -e \"require('prisma/build/index.js')\" migrate deploy",
     "db:migrate:dev": "node -e \"require('prisma/build/index.js')\" migrate dev",

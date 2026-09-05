@@ -25,17 +25,33 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:3002',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:3002',
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow non-browser agents (curl, postman, server-to-server) without origin
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS policy violation: Origin '${origin}' is not authorized.`));
+      if (!origin) {
+        return callback(null, true);
       }
+
+      // In development / test, permit any localhost or 127.0.0.1 port (e.g. Next.js on 3000-3005)
+      if (process.env.NODE_ENV !== 'production') {
+        const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/.test(origin);
+        if (isLocalhost) {
+          return callback(null, true);
+        }
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
