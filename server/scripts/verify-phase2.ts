@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import http from 'http';
 import { AddressInfo } from 'net';
 import { app } from '../src/server';

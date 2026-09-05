@@ -17,6 +17,39 @@ services:
       timeout: 5s
       retries: 5
 
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: stockpulse-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockpulse_inventory?schema=public&connection_limit=10&pool_timeout=20
+      PORT: 3001
+      NODE_ENV: production
+      CLIENT_URL: http://localhost:3000
+      JWT_SECRET: enterprise-grade-stockpulse-jwt-secret-key-replace-in-production
+    ports:
+      - "3001:3001"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stockpulse-frontend
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data:
     driver: local

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { Prisma, ProductStatus } from '@prisma/client';
 import prisma from '../db/client';
+import { sendSuccess, sendError } from '../utils/response';
 
 // ============================================================================
 // 1. Zod Validation Guardrails
@@ -163,30 +164,24 @@ export async function getProductsHandler(req: Request, res: Response): Promise<v
       }),
     ]);
 
-    res.json({
-      success: true,
-      data: products,
-      pagination: {
-        page: pageNum,
-        limit: take,
-        totalItems: totalCount,
-        totalPages: Math.max(1, Math.ceil(totalCount / take)),
-      },
-      meta: {
+    return void sendSuccess(
+      res,
+      products,
+      {
         page: pageNum,
         limit: take,
         total: totalCount,
-        totalItems: totalCount,
         totalPages: Math.max(1, Math.ceil(totalCount / take)),
-      },
-    });
+      }
+    );
   } catch (err: any) {
     console.error('Error in getProductsHandler:', err);
-    res.status(500).json({
-      success: false,
-      error: 'FETCH_PRODUCTS_FAILED',
-      message: 'Failed to retrieve product inventory.',
-    });
+    return void sendError(
+      res,
+      'FETCH_PRODUCTS_FAILED',
+      'Failed to retrieve product inventory.',
+      500
+    );
   }
 }
 
@@ -198,19 +193,18 @@ export async function getProductsHandler(req: Request, res: Response): Promise<v
 export async function createProductHandler(req: Request, res: Response): Promise<void> {
   const organizationId = req.user?.organizationId;
   if (!organizationId) {
-    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Missing tenant context.' });
-    return;
+    return void sendError(res, 'UNAUTHORIZED', 'Missing tenant context.', 401);
   }
 
   const parseResult = createProductSchema.safeParse(req.body);
   if (!parseResult.success) {
-    res.status(400).json({
-      success: false,
-      error: 'VALIDATION_ERROR',
-      message: 'Product payload validation failed.',
-      errors: parseResult.error.flatten().fieldErrors,
-    });
-    return;
+    return void sendError(
+      res,
+      'VALIDATION_ERROR',
+      'Product payload validation failed.',
+      400,
+      parseResult.error.flatten().fieldErrors
+    );
   }
 
   const data = parseResult.data;
@@ -222,12 +216,12 @@ export async function createProductHandler(req: Request, res: Response): Promise
         where: { id: data.categoryId, organizationId },
       });
       if (!category) {
-        res.status(400).json({
-          success: false,
-          error: 'INVALID_CATEGORY',
-          message: 'The specified categoryId does not exist within your organization.',
-        });
-        return;
+        return void sendError(
+          res,
+          'INVALID_CATEGORY',
+          'The specified categoryId does not exist within your organization.',
+          400
+        );
       }
     }
 
@@ -242,12 +236,12 @@ export async function createProductHandler(req: Request, res: Response): Promise
     });
 
     if (existingSku) {
-      res.status(409).json({
-        success: false,
-        error: 'DUPLICATE_SKU',
-        message: `Product with SKU '${data.sku.toUpperCase()}' already exists in your organization.`,
-      });
-      return;
+      return void sendError(
+        res,
+        'DUPLICATE_SKU',
+        `Product with SKU '${data.sku.toUpperCase()}' already exists in your organization.`,
+        409
+      );
     }
 
     const newProduct = await prisma.product.create({
@@ -270,17 +264,15 @@ export async function createProductHandler(req: Request, res: Response): Promise
       },
     });
 
-    res.status(201).json({
-      success: true,
-      data: newProduct,
-    });
+    return void sendSuccess(res, newProduct, undefined, 201);
   } catch (err: any) {
     console.error('Error in createProductHandler:', err);
-    res.status(500).json({
-      success: false,
-      error: 'CREATE_PRODUCT_FAILED',
-      message: 'Failed to create inventory item.',
-    });
+    return void sendError(
+      res,
+      'CREATE_PRODUCT_FAILED',
+      'Failed to create inventory item.',
+      500
+    );
   }
 }
 
@@ -294,19 +286,18 @@ export async function updateProductHandler(req: Request, res: Response): Promise
   const productId = req.params.id;
 
   if (!organizationId) {
-    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Missing tenant context.' });
-    return;
+    return void sendError(res, 'UNAUTHORIZED', 'Missing tenant context.', 401);
   }
 
   const parseResult = updateProductSchema.safeParse(req.body);
   if (!parseResult.success) {
-    res.status(400).json({
-      success: false,
-      error: 'VALIDATION_ERROR',
-      message: 'Product update payload validation failed.',
-      errors: parseResult.error.flatten().fieldErrors,
-    });
-    return;
+    return void sendError(
+      res,
+      'VALIDATION_ERROR',
+      'Product update payload validation failed.',
+      400,
+      parseResult.error.flatten().fieldErrors
+    );
   }
 
   const data = parseResult.data;
@@ -318,12 +309,12 @@ export async function updateProductHandler(req: Request, res: Response): Promise
     });
 
     if (!existing) {
-      res.status(404).json({
-        success: false,
-        error: 'NOT_FOUND',
-        message: 'Product not found within your organization.',
-      });
-      return;
+      return void sendError(
+        res,
+        'NOT_FOUND',
+        'Product not found within your organization.',
+        404
+      );
     }
 
     const updateData: Prisma.ProductUpdateInput = {};
@@ -347,17 +338,15 @@ export async function updateProductHandler(req: Request, res: Response): Promise
       },
     });
 
-    res.json({
-      success: true,
-      data: updatedProduct,
-    });
+    return void sendSuccess(res, updatedProduct);
   } catch (err: any) {
     console.error('Error in updateProductHandler:', err);
-    res.status(500).json({
-      success: false,
-      error: 'UPDATE_PRODUCT_FAILED',
-      message: 'Failed to update product.',
-    });
+    return void sendError(
+      res,
+      'UPDATE_PRODUCT_FAILED',
+      'Failed to update product.',
+      500
+    );
   }
 }
 
@@ -371,19 +360,18 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
   const productId = req.params.id;
 
   if (!organizationId) {
-    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Missing tenant context.' });
-    return;
+    return void sendError(res, 'UNAUTHORIZED', 'Missing tenant context.', 401);
   }
 
   const parseResult = adjustStockSchema.safeParse(req.body);
   if (!parseResult.success) {
-    res.status(400).json({
-      success: false,
-      error: 'VALIDATION_ERROR',
-      message: 'Invalid stock adjustment parameters.',
-      errors: parseResult.error.flatten().fieldErrors,
-    });
-    return;
+    return void sendError(
+      res,
+      'VALIDATION_ERROR',
+      'Invalid stock adjustment parameters.',
+      400,
+      parseResult.error.flatten().fieldErrors
+    );
   }
 
   const { adjustment, adjustmentQuantity, stockQuantity } = parseResult.data;
@@ -395,12 +383,12 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
     });
 
     if (!product) {
-      res.status(404).json({
-        success: false,
-        error: 'NOT_FOUND',
-        message: 'Product not found within your organization.',
-      });
-      return;
+      return void sendError(
+        res,
+        'NOT_FOUND',
+        'Product not found within your organization.',
+        404
+      );
     }
 
     let nextStock: number;
@@ -409,17 +397,16 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
     } else if (effectiveAdjustment !== undefined) {
       nextStock = product.stockQuantity + effectiveAdjustment;
     } else {
-      res.status(400).json({ success: false, error: 'BAD_REQUEST', message: 'Missing adjustment parameter.' });
-      return;
+      return void sendError(res, 'BAD_REQUEST', 'Missing adjustment parameter.', 400);
     }
 
     if (nextStock < 0) {
-      res.status(400).json({
-        success: false,
-        error: 'INVALID_STOCK_ADJUSTMENT',
-        message: `Adjustment would result in negative inventory (${nextStock}). Stock count must be >= 0.`,
-      });
-      return;
+      return void sendError(
+        res,
+        'INVALID_STOCK_ADJUSTMENT',
+        `Adjustment would result in negative inventory (${nextStock}). Stock count must be >= 0.`,
+        400
+      );
     }
 
     const updated = await prisma.product.update({
@@ -430,22 +417,20 @@ export async function adjustStockHandler(req: Request, res: Response): Promise<v
       },
     });
 
-    res.json({
-      success: true,
-      data: {
-        ...updated,
-        previousStock: product.stockQuantity,
-        newStock: updated.stockQuantity,
-        adjustmentQuantity: effectiveAdjustment,
-      },
+    return void sendSuccess(res, {
+      ...updated,
+      previousStock: product.stockQuantity,
+      newStock: updated.stockQuantity,
+      adjustmentQuantity: effectiveAdjustment,
     });
   } catch (err: any) {
     console.error('Error in adjustStockHandler:', err);
-    res.status(500).json({
-      success: false,
-      error: 'ADJUST_STOCK_FAILED',
-      message: 'Failed to adjust stock count.',
-    });
+    return void sendError(
+      res,
+      'ADJUST_STOCK_FAILED',
+      'Failed to adjust stock count.',
+      500
+    );
   }
 }
 
@@ -459,8 +444,7 @@ export async function deleteProductHandler(req: Request, res: Response): Promise
   const productId = req.params.id;
 
   if (!organizationId) {
-    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Missing tenant context.' });
-    return;
+    return void sendError(res, 'UNAUTHORIZED', 'Missing tenant context.', 401);
   }
 
   try {
@@ -469,28 +453,32 @@ export async function deleteProductHandler(req: Request, res: Response): Promise
     });
 
     if (!product) {
-      res.status(404).json({
-        success: false,
-        error: 'NOT_FOUND',
-        message: 'Product not found within your organization.',
-      });
-      return;
+      return void sendError(
+        res,
+        'NOT_FOUND',
+        'Product not found within your organization.',
+        404
+      );
     }
 
     await prisma.product.delete({
       where: { id: productId },
     });
 
-    res.json({
-      success: true,
-      message: `Product '${product.name}' (SKU: ${product.sku}) successfully deleted.`,
-    });
+    return void sendSuccess(
+      res,
+      { id: productId, deleted: true },
+      undefined,
+      200,
+      `Product '${product.name}' (SKU: ${product.sku}) successfully deleted.`
+    );
   } catch (err: any) {
     console.error('Error in deleteProductHandler:', err);
-    res.status(500).json({
-      success: false,
-      error: 'DELETE_PRODUCT_FAILED',
-      message: 'Failed to delete product. It may be referenced by existing orders.',
-    });
+    return void sendError(
+      res,
+      'DELETE_PRODUCT_FAILED',
+      'Failed to delete product. It may be referenced by existing orders.',
+      500
+    );
   }
 }

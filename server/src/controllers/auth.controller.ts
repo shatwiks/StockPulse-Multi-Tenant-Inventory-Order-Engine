@@ -3,6 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import prisma from '../db/client';
 import { generateToken } from '../middleware/auth';
+import { sendError } from '../utils/response';
 
 export const loginSchema = z.object({
   email: z.string().email({ message: 'Valid email is required.' }),
@@ -17,13 +18,13 @@ export const loginSchema = z.object({
 export async function loginHandler(req: Request, res: Response): Promise<void> {
   const parseResult = loginSchema.safeParse(req.body);
   if (!parseResult.success) {
-    res.status(400).json({
-      success: false,
-      error: 'VALIDATION_ERROR',
-      message: 'Invalid login parameters.',
-      errors: parseResult.error.flatten().fieldErrors,
-    });
-    return;
+    return void sendError(
+      res,
+      'VALIDATION_ERROR',
+      'Invalid login parameters.',
+      400,
+      parseResult.error.flatten().fieldErrors
+    );
   }
 
   const { email, password, organizationId } = parseResult.data;
@@ -47,40 +48,25 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     });
 
     if (!user || !user.passwordHash) {
-      res.status(401).json({
-        success: false,
-        error: 'INVALID_CREDENTIALS',
-        message: 'Invalid email or password.',
-      });
-      return;
+      return void sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password.', 401);
     }
 
     if (!user.isActive) {
-      res.status(403).json({
-        success: false,
-        error: 'USER_INACTIVE',
-        message: 'This user account has been deactivated.',
-      });
-      return;
+      return void sendError(res, 'USER_INACTIVE', 'This user account has been deactivated.', 403);
     }
 
     if (user.organization.status !== 'ACTIVE') {
-      res.status(403).json({
-        success: false,
-        error: 'ORGANIZATION_INACTIVE',
-        message: 'The associated organization is currently suspended or inactive.',
-      });
-      return;
+      return void sendError(
+        res,
+        'ORGANIZATION_INACTIVE',
+        'The associated organization is currently suspended or inactive.',
+        403
+      );
     }
 
     const passwordMatches = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatches) {
-      res.status(401).json({
-        success: false,
-        error: 'INVALID_CREDENTIALS',
-        message: 'Invalid email or password.',
-      });
-      return;
+      return void sendError(res, 'INVALID_CREDENTIALS', 'Invalid email or password.', 401);
     }
 
     const token = generateToken({
@@ -92,8 +78,7 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       ...(user.lastName ? { lastName: user.lastName } : {}),
     });
 
-    res.json({
-      success: true,
+    const authPayload = {
       token,
       user: {
         id: user.id,
@@ -105,13 +90,21 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
         organizationName: user.organization.name,
         organizationSlug: user.organization.slug,
       },
+    };
+
+    res.status(200).json({
+      success: true,
+      data: authPayload,
+      token,
+      user: authPayload.user,
     });
   } catch (err: any) {
     console.error('Login error:', err);
-    res.status(500).json({
-      success: false,
-      error: 'INTERNAL_SERVER_ERROR',
-      message: 'Authentication failed due to an unexpected server error.',
-    });
+    return void sendError(
+      res,
+      'INTERNAL_SERVER_ERROR',
+      'Authentication failed due to an unexpected server error.',
+      500
+    );
   }
 }

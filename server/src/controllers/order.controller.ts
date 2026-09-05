@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { Prisma, OrderStatus } from '@prisma/client';
 import prisma from '../db/client';
+import { sendSuccess, sendError } from '../utils/response';
 
 // ============================================================================
 // 1. Zod Request Validation Guardrails
@@ -76,19 +77,18 @@ export class InsufficientStockError extends Error {
 export async function placeOrderHandler(req: Request, res: Response): Promise<void> {
   const organizationId = req.user?.organizationId;
   if (!organizationId) {
-    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Missing tenant context.' });
-    return;
+    return void sendError(res, 'UNAUTHORIZED', 'Missing tenant context.', 401);
   }
 
   const parseResult = placeOrderSchema.safeParse(req.body);
   if (!parseResult.success) {
-    res.status(400).json({
-      success: false,
-      error: 'VALIDATION_ERROR',
-      message: 'Invalid order placement request payload.',
-      errors: parseResult.error.flatten().fieldErrors,
-    });
-    return;
+    return void sendError(
+      res,
+      'VALIDATION_ERROR',
+      'Invalid order placement request payload.',
+      400,
+      parseResult.error.flatten().fieldErrors
+    );
   }
 
   const { customerName, customerEmail, notes, items } = parseResult.data;
@@ -242,56 +242,48 @@ export async function placeOrderHandler(req: Request, res: Response): Promise<vo
       }
     );
 
-    res.status(201).json({
-      success: true,
-      message: 'Order successfully placed and inventory deducted.',
-      data: {
+    return void sendSuccess(
+      res,
+      {
         ...createdOrder,
         order: createdOrder,
       },
-    });
+      undefined,
+      201,
+      'Order successfully placed and inventory deducted.'
+    );
   } catch (err: any) {
     if (err instanceof InsufficientStockError) {
-      res.status(409).json({
-        success: false,
-        error: {
-          code: err.code,
-          message: err.message,
-          details: err.shortages,
-        },
-        message: err.message,
-        shortages: err.shortages,
-        details: err.shortages,
-      });
-      return;
+      return void sendError(res, err.code, err.message, 409, err.shortages);
     }
 
     if (err.status && err.message) {
-      res.status(err.status).json({
-        success: false,
-        error: err.code || 'BAD_REQUEST',
-        message: err.message,
-        ...(err.missingProductIds ? { missingProductIds: err.missingProductIds } : {}),
-      });
-      return;
+      return void sendError(
+        res,
+        err.code || 'BAD_REQUEST',
+        err.message,
+        err.status,
+        err.missingProductIds ? { missingProductIds: err.missingProductIds } : undefined
+      );
     }
 
     // Check for PostgreSQL check constraint violation (P2003 or 23514)
     if (err.message && err.message.includes('products_stock_quantity_check')) {
-      res.status(409).json({
-        success: false,
-        error: 'INSUFFICIENT_STOCK',
-        message: 'Transaction aborted: check constraint prevented negative stock count.',
-      });
-      return;
+      return void sendError(
+        res,
+        'INSUFFICIENT_STOCK',
+        'Transaction aborted: check constraint prevented negative stock count.',
+        409
+      );
     }
 
     console.error('Unhandled checkout error:', err);
-    res.status(500).json({
-      success: false,
-      error: 'ORDER_PROCESSING_FAILED',
-      message: 'An internal error occurred during checkout processing.',
-    });
+    return void sendError(
+      res,
+      'ORDER_PROCESSING_FAILED',
+      'An internal error occurred during checkout processing.',
+      500
+    );
   }
 }
 
@@ -303,8 +295,7 @@ export async function placeOrderHandler(req: Request, res: Response): Promise<vo
 export async function getOrdersHandler(req: Request, res: Response): Promise<void> {
   const organizationId = req.user?.organizationId;
   if (!organizationId) {
-    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Missing tenant context.' });
-    return;
+    return void sendError(res, 'UNAUTHORIZED', 'Missing tenant context.', 401);
   }
 
   try {
@@ -331,22 +322,23 @@ export async function getOrdersHandler(req: Request, res: Response): Promise<voi
       }),
     ]);
 
-    res.json({
-      success: true,
-      data: orders,
-      pagination: {
+    return void sendSuccess(
+      res,
+      orders,
+      {
         page,
         limit,
-        totalItems,
+        total: totalItems,
         totalPages: Math.max(1, Math.ceil(totalItems / limit)),
-      },
-    });
+      }
+    );
   } catch (err: any) {
     console.error('Error fetching orders:', err);
-    res.status(500).json({
-      success: false,
-      error: 'FETCH_ORDERS_FAILED',
-      message: 'Failed to retrieve order history.',
-    });
+    return void sendError(
+      res,
+      'FETCH_ORDERS_FAILED',
+      'Failed to retrieve order history.',
+      500
+    );
   }
 }

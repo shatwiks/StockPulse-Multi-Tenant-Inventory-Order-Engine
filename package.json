@@ -20,7 +20,9 @@
     "test:constraints": "npm run test:constraints --prefix server",
     "test:checkout": "npm run test:checkout --prefix server",
     "test:phase2": "npm run test:phase2 --prefix server",
-    "test:phase3": "npm run test:phase3 --prefix server"
+    "test:phase3": "npm run test:phase3 --prefix server",
+    "test:a11y": "npm run test:a11y --prefix frontend",
+    "docker:seed": "docker compose exec server npx tsx prisma/seed.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

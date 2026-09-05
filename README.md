@@ -1,719 +1,235 @@
 # StockPulse: Multi-Tenant Inventory & Order Engine
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-24.x-green?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Express.js](https://img.shields.io/badge/Express.js-4.21-lightgrey?logo=express&logoColor=white)](https://expressjs.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Prisma ORM](https://img.shields.io/badge/Prisma-5.22-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
-[![Helmet Security](https://img.shields.io/badge/Helmet-Secured-darkgreen?logo=shield&logoColor=white)](https://helmetjs.github.io/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![StockPulse Engine](https://img.shields.io/badge/StockPulse-Enterprise%20B2B%20Engine-8B5CF6?style=for-the-badge&logo=target&logoColor=white)](https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine)
+[![CI Build Status](https://img.shields.io/github/actions/workflow/status/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI%20BUILD)](https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine/actions)
+[![WCAG 2.1 AA](https://img.shields.io/badge/Accessibility-WCAG%202.1%20AA-success?style=for-the-badge&logo=w3c&logoColor=white)](https://www.w3.org/WAI/WCAG21/quickref/)
+[![Docker](https://img.shields.io/badge/Docker-Ready%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Docker](https://img.shields.io/badge/Docker-29.x-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Zod](https://img.shields.io/badge/Zod-3.24-blueviolet?logo=zod&logoColor=white)](https://zod.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Express.js](https://img.shields.io/badge/Express.js-4.21-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Prisma ORM](https://img.shields.io/badge/Prisma-5.22-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**StockPulse** is a scalable, enterprise-grade multi-tenant B2B inventory management and Point-of-Sale (POS) order engine. Engineered with row-level tenant isolation, deadlock-free PostgreSQL row-locking (`SELECT ... FOR UPDATE`), database-level integrity constraints (`CHECK stock_quantity >= 0`), hardened security headers, rate limiting, and a high-density, WCAG 2.1 AA accessible Admin Dashboard with dark walnut aesthetics.
-
----
-
-## 1. Enterprise Security Architecture & Threat Model
-
-StockPulse implements Defense-in-Depth across every layer (Network, Application, Database).
-
-### Multi-Tenant Threat Model & Mitigation Matrix
-
-| Threat / Attack Vector | Risk Level | Target Area | Enterprise Mitigation in StockPulse |
-|---|---|---|---|
-| **SQL Injection (SQLi)** | Critical | Database Layer | Parameterized queries enforced across all Prisma queries and raw SQL fragments (`$queryRaw` tagged templates with strong parameter binding). |
-| **Broken Object-Level Access Control (BOLA / IDOR)** | Critical | API / Tenant Layer | Strict row-level tenant isolation: every tenant query enforces `organization_id` foreign key matching. Cross-tenant reads and mutations return `404 Not Found` or `403 Forbidden`. |
-| **Race Conditions / Concurrent Overselling** | Critical | Order Checkout | Deadlock-free row-level locking via `SELECT ... FOR UPDATE` with product IDs sorted in deterministic order (`ORDER BY id ASC`), wrapped in an atomic PostgreSQL transaction. |
-| **Negative Stock Data Corruption** | Critical | Data Integrity | Database-level `CONSTRAINT "products_stock_quantity_check" CHECK ("stock_quantity" >= 0)` guarantees that negative stock is rejected at the storage engine level even in case of software bugs. |
-| **Parameter Tampering / Invalid Data Types** | High | Input Validation | Strict Zod validation schemas (`z.object({ ... })`) at controller boundaries reject invalid types, negative quantities, or extra unexpected fields. |
-| **Cross-Origin Resource Sharing (CORS) Abuse** | High | Network / API | Wildcard origins (`*`) are banned. CORS is strictly restricted to authorized domains via `CLIENT_URL` with explicit method and header whitelisting. |
-| **Brute-Force & Denial-of-Service (DoS)** | Medium | API Endpoints | `express-rate-limit` enforces rate limits (200 requests per 15-minute window per IP) on all `/api/` routes. Payload limits (1MB) prevent memory exhaustion. |
-| **Clickjacking & MIME-Sniffing** | Medium | HTTP Chrome | `helmet` injects defensive HTTP headers (`X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`). |
-| **Credential Storage Compromise** | Critical | Authentication | Password hashes generated with `bcrypt` using 10 salt rounds. Plaintext passwords are never persisted. |
+**StockPulse** is a distributed, multi-tenant B2B inventory management platform and high-concurrency Point-of-Sale (POS) order engine. Engineered to solve the mission-critical challenges of inventory contention, POS deadlocks, and cross-tenant data leakage, StockPulse combines pessimistic row-level database locking, strict row-level security isolation, and an accessible dark-walnut executive dashboard.
 
 ---
 
-## 2. Monorepo Organization
+## 📌 Problem Statement & Architecture
 
-The codebase is organized as a decoupled monorepo:
+### The Concurrency & Isolation Challenge in High-Volume B2B POS
+1. **Overselling & Inventory Drift:** Concurrent cashiers and batch orders purchasing the last remaining units simultaneously cause negative stock balances and fulfillment failures.
+2. **Deadlocks (PostgreSQL `40P01`):** In multi-item checkouts, when Transaction A locks Product 1 then requests Product 2, while Transaction B locks Product 2 then requests Product 1, cyclical lock-dependency triggers database deadlocks and aborted transactions.
+3. **Broken Object-Level Authorization (BOLA / IDOR):** Shared multi-tenant relational schemas risk cross-tenant data exposure and unauthorized price/stock tampering without strict tenant-scoped queries.
 
-```
-StockPulse-Multi-Tenant-Inventory-Order-Engine/
-├── docker-compose.yml          # Containerized PostgreSQL 16 database
-├── package.json                # Root monorepo workspace scripts
-├── .gitignore                  # Environment, build, and module ignore rules
-├── README.md                   # Architecture & setup documentation
-│
-├── server/                     # Backend Workspace (Node.js + Express + TypeScript)
-│   ├── src/
-│   │   ├── api/                # Controllers, validation schemas & routes
-│   │   │   ├── orders.controller.ts  # Atomic checkout with row-level locking
-│   │   │   └── routes.ts             # REST API routes (/api/v1/...)
-│   │   ├── db/                 # Database client singleton (Prisma Client)
-│   │   │   └── client.ts
-│   │   ├── server.ts           # Express init, Helmet, Rate Limit, CORS
-│   │   └── index.ts            # Public server exports
-│   ├── prisma/
-│   │   ├── schema.prisma       # Multi-tenant PostgreSQL relational schema
-│   │   ├── seed.ts             # Realistic 2-tenant seed script (bcrypt)
-│   │   └── migrations/         # DDL migrations with CHECK constraints & indexes
-│   ├── scripts/
-│   │   ├── verify-constraints.ts    # Multi-tenancy & CHECK constraint tests
-│   │   └── test-concurrent-checkout.ts # Concurrency race-condition stress test
-│   ├── package.json            # Vetted backend dependencies
-│   ├── tsconfig.json           # Hardened TypeScript config (strict, exactOptionalPropertyTypes)
-│   ├── .env                    # Server runtime environment
-│   └── .env.example            # Backend environment template
-│
-└── frontend/                   # Frontend Workspace (Next.js 16 + React 19)
-    ├── app/                    # Next.js App Router (layout, globals.css, fonts)
-    ├── components/
-    │   ├── dashboard/          # Inventory table, Order Desk POS, top bar, sidebar
-    │   │   ├── inventory-view.tsx    # View 1: High-density stock catalog & ledger
-    │   │   └── order-desk-view.tsx   # View 2: Split-screen POS terminal & receipts
-    │   ├── ui/                 # Base UI / Radix primitives
-    │   └── query-provider.tsx  # TanStack Query client provider wrapper
-    ├── public/                 # Static assets & textures (walnut wood-grain)
-    ├── package.json            # Frontend dependencies (TanStack Query, Base UI)
-    ├── tsconfig.json           # Frontend TypeScript configuration
-    └── .env.example            # Frontend environment template
-```
-
----
-
-## 3. Entity-Relationship Diagram (ERD)
-
-Every entity is scoped by `organization_id` (UUID) with `ON DELETE CASCADE` to guarantee strict row-level tenant isolation:
+### System Architecture & Transaction Flow
 
 ```mermaid
-erDiagram
-    organizations ||--o{ users : "has"
-    organizations ||--o{ categories : "owns"
-    organizations ||--o{ products : "manages"
-    organizations ||--o{ orders : "processes"
-    organizations ||--o{ order_items : "tracks"
+sequenceDiagram
+    autonumber
+    actor Cashier as POS Cashier / Client
+    participant Frontend as Next.js 16 (React 19 + TanStack Query)
+    participant API as Express API (Hardened Security Gateway)
+    participant DB as PostgreSQL 16 (Row-Level Locking Engine)
 
-    categories ||--o{ products : "classifies"
-    orders ||--o{ order_items : "contains"
-    products ||--o{ order_items : "purchased_in"
-
-    organizations {
-        uuid id PK "gen_random_uuid()"
-        varchar name "Organization name"
-        varchar slug UK "Unique tenant slug"
-        varchar currency "USD / EUR (Default: USD)"
-        enum status "ACTIVE, SUSPENDED, TRIAL"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    users {
-        uuid id PK "gen_random_uuid()"
-        uuid organization_id FK "Tenant ID (CASCADE)"
-        varchar email "Unique per tenant"
-        varchar password_hash "Bcrypt hash (10 rounds)"
-        enum role "ADMIN, MANAGER, CASHIER"
-        boolean is_active "Active status flag"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    categories {
-        uuid id PK "gen_random_uuid()"
-        uuid organization_id FK "Tenant ID (CASCADE)"
-        varchar name "Category title"
-        varchar slug "Scoped category slug"
-        text description
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    products {
-        uuid id PK "gen_random_uuid()"
-        uuid organization_id FK "Tenant ID (CASCADE)"
-        uuid category_id FK "Category reference"
-        varchar sku "Unique per tenant"
-        varchar name "Product title"
-        text description
-        decimal unit_price "Selling price (10,2)"
-        decimal cost_price "COGS / Cost price (10,2)"
-        integer stock_quantity "CHECK (stock_quantity >= 0)"
-        integer reorder_level "Threshold indicator (default: 10)"
-        enum status "ACTIVE, DRAFT, DISCONTINUED, OUT_OF_STOCK"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    orders {
-        uuid id PK "gen_random_uuid()"
-        uuid organization_id FK "Tenant ID (CASCADE)"
-        varchar order_number "Unique per tenant"
-        varchar customer_name
-        varchar customer_email
-        decimal total_amount "Order sum (10,2)"
-        decimal tax_amount "Order tax (10,2)"
-        enum status "COMPLETED, HELD, CANCELLED"
-        text notes
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    order_items {
-        uuid id PK "gen_random_uuid()"
-        uuid organization_id FK "Tenant ID (CASCADE)"
-        uuid order_id FK "Parent order (CASCADE)"
-        uuid product_id FK "Product item (RESTRICT)"
-        integer quantity "CHECK (quantity > 0)"
-        decimal unit_price "Snapshotted price (10,2)"
-        decimal total_price "Line total (10,2)"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-```
-
-### Composite Indexes & Database Constraints
-1. **Composite Index `(organization_id, sku)`**:
-   Enforces rapid SKU lookups scoped to each tenant while guaranteeing uniqueness within that tenant's partition.
-2. **Composite Index `(organization_id, created_at DESC)`**:
-   Optimizes paginated catalog feeds and historical order queries without table-scan penalties.
-3. **Storage Constraint `CHECK (stock_quantity >= 0)`**:
-   Guarantees that negative stock cannot be persisted at the storage engine level.
-4. **Storage Constraint `CHECK (quantity > 0)`**:
-   Guarantees order items contain positive quantities.
-
----
-
-## 4. Getting Started
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v20 or v24 LTS)
-- [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)
-- [Git](https://git-scm.com/)
-
----
-
-### Step 1: Clone the Repository
-```bash
-git clone https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine.git
-cd StockPulse-Multi-Tenant-Inventory-Order-Engine
+    Cashier->>Frontend: Click "Complete Payment" (POS Basket)
+    Frontend->>API: POST /api/v1/orders (Bearer JWT + Basket Items)
+    
+    Note over API: 1. Verify JWT & Extract Tenant Context (organization_id)<br/>2. Validate payload schema with Zod<br/>3. Enforce RBAC permissions (CASHIER/MANAGER/ADMIN)
+    
+    API->>DB: BEGIN TRANSACTION (ISOLATION LEVEL READ COMMITTED)
+    
+    Note over DB: Deterministic Lock Acquisition (ORDER BY id ASC):<br/>SELECT ... FROM products WHERE id = ANY(...) FOR UPDATE
+    
+    alt Sufficient Stock for All Items
+        DB-->>API: Row Locks Granted & Verified Balances
+        API->>DB: UPDATE products SET stock_quantity = stock_quantity - delta
+        API->>DB: INSERT INTO orders + INSERT INTO order_items
+        API->>DB: COMMIT TRANSACTION
+        API-->>Frontend: HTTP 201 Created (Order Receipt & Updated Balances)
+        Frontend-->>Cashier: Display Printable Receipt Modal + Trap Focus
+    else Insufficient Inventory (Race Condition Shortage)
+        DB-->>API: Itemized Stock Shortage Detected
+        API->>DB: ROLLBACK TRANSACTION
+        API-->>Frontend: HTTP 409 Conflict (code: INSUFFICIENT_STOCK, details: [shortages])
+        Frontend-->>Cashier: Trigger 409 Shortage Dialog & Reconcile Cart Quantities
+    end
 ```
 
 ---
 
-### Step 2: Configure Environment Variables
+## ⚡ Key Engineering Highlights
 
-**Backend (`server/.env`)**:
-```bash
-cp server/.env.example server/.env
-```
-Contents:
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/stockpulse_inventory?schema=public"
-NODE_ENV="development"
-PORT=3001
-CLIENT_URL="http://localhost:5173"
-JWT_SECRET="enterprise-grade-stockpulse-jwt-secret-key-replace-in-production"
-```
+### 1. Deterministic Row-Level Locking (`SELECT ... FOR UPDATE ORDER BY id ASC`)
+* **Deadlock Elimination:** By sorting all product UUIDs in strictly ascending order (`ORDER BY id ASC`) prior to acquiring pessimistic row locks inside the transaction, cyclical wait-for graphs ($A \to B$ vs. $B \to A$) are mathematically impossible.
+* **Zero Overselling Guarantee:** Stock availability is verified within the active lock boundary. If stock is sufficient, inventory is deducted atomically before the transaction commits.
 
-**Frontend (`frontend/.env`)**:
-```bash
-cp frontend/.env.example frontend/.env
-```
-Contents:
-```env
-NEXT_PUBLIC_API_URL="http://localhost:3001"
-NEXT_PUBLIC_DEFAULT_ORG_ID="8fca3ba6-54a5-4985-ac05-2887f056f798"
-```
+### 2. Immediate 409 Conflict Rollback & Real-Time Cart Reconciliation
+* **ACID Integrity:** When a concurrent transaction claims the remaining inventory milliseconds earlier, StockPulse immediately aborts and rolls back the checkout transaction.
+* **Automated POS Cart Reconciliation:** Returns structured shortage details (`productId`, `sku`, `name`, `availableStock`, `requestedQuantity`). The frontend automatically reconciles the cashier's cart to the exact available physical balance and triggers an accessible alert modal.
 
----
+### 3. Zero-Trust Multi-Tenancy & Integrity Constraints
+* **Strict Tenant Scoping:** Every relational table (`organizations`, `users`, `categories`, `products`, `orders`, `order_items`) is partitioned by `organization_id` (UUID) with foreign keys enforcing `ON DELETE CASCADE`.
+* **Hardware-Level Negative Stock Defense:** Even if an application bug bypassed validation, PostgreSQL enforces:
+  ```sql
+  CONSTRAINT "products_stock_quantity_check" CHECK ("stock_quantity" >= 0)
+  ```
+  Any attempt to drive inventory below zero is aborted at the database engine level.
+* **Composite Performance Indexes:** High-speed lookup and unique constraint enforcement:
+  * `@@unique([organizationId, sku], name: "unique_org_sku")`
+  * `@@index([organizationId, status])`
+  * `@@index([organizationId, createdAt(sort: Desc)])`
 
-### Step 3: Start the PostgreSQL Database
-
-Spin up the containerized PostgreSQL 16 database:
-```bash
-docker compose up -d
-```
-
-Verify container health:
-```bash
-docker ps --filter "name=stockpulse-postgres"
-```
-
----
-
-### Step 4: Install Dependencies & Run Database Migrations
-
-Install dependencies across the monorepo:
-```bash
-# Install backend dependencies
-cd server
-npm install
-
-# Install frontend dependencies
-cd ../frontend
-npm install
-cd ..
-```
-
-Deploy migrations and populate seed data:
-```bash
-# Run Prisma migration
-npm run db:migrate
-
-# Seed 2 realistic organizations (Acme Retail & Summit Supplies)
-npm run db:seed
-```
-
----
-
-### Step 5: Verify Security Constraints, RBAC & End-to-End Flows
-
-Execute the automated test suites:
-
-```bash
-# Test 1: Verify multi-tenant isolation and CHECK constraints
-npm run test:constraints
-
-# Test 2: Concurrency stress test (Row-locking & 409 Conflict rollback)
-npm run test:checkout
-
-# Test 3: Phase 2 Security & RBAC Suite (Cross-tenant, Least Privilege, 10x Concurrent Checkouts)
-npm run test:phase2
-
-# Test 4: Phase 3 End-to-End Suite (TanStack Query, Product CRUD, Stock Adj, Atomic POS Checkout)
-npm run test:phase3
-```
-
----
-
-### Step 6: Unified Local Development (`npm run dev`)
-
-Run both the Express API and Next.js Frontend concurrently with a single command:
-
-```bash
-# Starts Express API (:3001) and Next.js Frontend (:3000) concurrently
-npm run dev
-```
-
-Or build both workspaces for production with zero TypeScript errors:
-
-```bash
-# Compiles both server (tsc) and frontend (next build)
-npm run build
-```
-
-Individual workspace commands remain available:
-```bash
-npm run dev:server     # Backend only (http://localhost:3001)
-npm run dev:frontend   # Frontend only (http://localhost:3000)
-```
-
----
-
-## 5. Role-Based Access Control (RBAC) Matrix
-
-StockPulse enforces the **Principle of Least Privilege (PoLP)** across all operations:
-
-| Resource & Operation | HTTP Method & Route | Required Roles | CASHIER | MANAGER | ADMIN |
-|---|---|---|:---:|:---:|:---:|
-| User Authentication | `POST /api/v1/auth/login` | Public | ✅ | ✅ | ✅ |
-| Query Catalog & Inventory | `GET /api/v1/products` | All Roles | ✅ | ✅ | ✅ |
-| Create Product | `POST /api/v1/products` | `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
-| Update Product & Price | `PATCH /api/v1/products/:id` | `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
-| Physical Stock Adjustment | `PATCH /api/v1/products/:id/stock`| `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
-| Delete Product | `DELETE /api/v1/products/:id` | `ADMIN`, `MANAGER` | ❌ (403) | ✅ | ✅ |
-| Place POS Order (Checkout) | `POST /api/v1/orders` | `ADMIN`, `MANAGER`, `CASHIER` | ✅ | ✅ | ✅ |
-| View Order Receipts & History | `GET /api/v1/orders` | `ADMIN`, `MANAGER`, `CASHIER` | ✅ | ✅ | ✅ |
-
----
-
-## 6. Hardened REST API Specification
-
-All authenticated requests require an `Authorization: Bearer <JWT>` header (or an HTTP-only cookie). Every endpoint automatically scopes queries to `req.user.organizationId` — tenant isolation is mathematically enforced at the query predicate layer.
-
-### 6.1 Authentication (`/api/v1/auth`)
-
-#### `POST /api/v1/auth/login`
-Authenticates a user within their organization and issues a signed JWT token (expires in 24h).
-
-- **Request Body**:
-```json
-{
-  "email": "cashier@acme-retail.com",
-  "password": "StockPulse2026!"
-}
-```
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "id": "23630f6a-ba8c-4bc4-b7db-115f013d33e5",
-      "organizationId": "8fca3ba6-54a5-4985-ac05-2887f056f798",
-      "email": "cashier@acme-retail.com",
-      "role": "CASHIER",
-      "firstName": "John",
-      "lastName": "Cashier",
-      "organization": {
-        "id": "8fca3ba6-54a5-4985-ac05-2887f056f798",
-        "name": "Acme Retail",
-        "slug": "acme-retail",
-        "currency": "USD"
-      }
+### 4. Standardized Enterprise API Envelope
+Every endpoint strictly adheres to a typed, predictable contract:
+* **Success Contract:**
+  ```json
+  {
+    "success": true,
+    "data": { ... },
+    "meta": {
+      "page": 1,
+      "limit": 20,
+      "total": 128,
+      "totalPages": 7
     }
   }
-}
-```
-
----
-
-### 6.2 Products & Inventory (`/api/v1/products`)
-
-#### `GET /api/v1/products`
-Returns a paginated list of products scoped strictly to the caller's organization.
-
-- **Query Parameters**:
-  - `page` *(number, optional, default: 1)*: Page number.
-  - `limit` *(number, optional, default: 20, max: 100)*: Max items per page to prevent memory exhaustion DoS.
-  - `search` *(string, optional)*: Sanitized substring search against `name` and `sku`.
-  - `category` *(UUID, optional)*: Filter by category ID.
-  - `status` *(string, optional)*: Filter by stock status (`IN_STOCK`, `LOW_STOCK`, `OUT_OF_STOCK`).
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
-      "organizationId": "8fca3ba6-54a5-4985-ac05-2887f056f798",
-      "categoryId": "c928ff67-d86b-4e1b-b46a-73ea614fa1d3",
-      "sku": "ACME-WIDGET-001",
-      "name": "Wireless Ergonomic Keyboard",
-      "description": "Premium multi-device keyboard",
-      "unitPrice": 89.99,
-      "costPrice": 45.00,
-      "stockQuantity": 42,
-      "reorderLevel": 10,
-      "status": "ACTIVE",
-      "stockStatus": "IN_STOCK",
-      "category": {
-        "id": "c928ff67-d86b-4e1b-b46a-73ea614fa1d3",
-        "name": "Electronics"
-      }
-    }
-  ],
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 1,
-    "totalPages": 1
-  }
-}
-```
-
-#### `POST /api/v1/products`
-Creates a new product within the caller's tenant. Protected by `requireRole(['ADMIN', 'MANAGER'])`.
-
-- **Request Body**:
-```json
-{
-  "sku": "ACME-AUDIO-PRO",
-  "name": "Studio Monitor Speakers",
-  "description": "Nearfield reference monitors",
-  "unitPrice": 249.99,
-  "costPrice": 140.00,
-  "stockQuantity": 25,
-  "reorderLevel": 5,
-  "categoryId": "c928ff67-d86b-4e1b-b46a-73ea614fa1d3"
-}
-```
-- **Response (201 Created)**: Returns the persisted product entity.
-
-#### `PATCH /api/v1/products/:id`
-Updates product metadata or base unit price. Protected by `requireRole(['ADMIN', 'MANAGER'])`. Cashiers receive `403 Forbidden`.
-
-#### `PATCH /api/v1/products/:id/stock`
-Adjusts inventory stock counts (+ or -) with database constraint verification. Protected by `requireRole(['ADMIN', 'MANAGER'])`. Rejects any adjustment that results in negative stock.
-
-- **Request Body**:
-```json
-{
-  "adjustmentQuantity": -5
-}
-```
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
-    "sku": "ACME-WIDGET-001",
-    "previousStock": 42,
-    "adjustmentQuantity": -5,
-    "newStock": 37
-  }
-}
-```
-
-#### `DELETE /api/v1/products/:id`
-Soft-archives or deletes an unreferenced product. Protected by `requireRole(['ADMIN', 'MANAGER'])`.
-
----
-
-### 6.3 Concurrency-Safe Checkout (`/api/v1/orders`)
-
-#### `POST /api/v1/orders`
-Executes an atomic, concurrency-safe checkout with row-level locks. Protected by `requireRole(['ADMIN', 'MANAGER', 'CASHIER'])`.
-
-- **Request Body**:
-```json
-{
-  "customerName": "Alice Johnson",
-  "customerEmail": "alice@example.com",
-  "items": [
-    {
-      "productId": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
-      "quantity": 2
-    }
-  ],
-  "notes": "Express POS checkout"
-}
-```
-- **Response (201 Created)**:
-```json
-{
-  "success": true,
-  "data": {
-    "order": {
-      "id": "673f4e85-b9f1-4df2-a3ce-7fbf49db96d1",
-      "orderNumber": "ORD-1788617466100-542",
-      "customerName": "Alice Johnson",
-      "customerEmail": "alice@example.com",
-      "subtotal": 179.98,
-      "taxAmount": 15.97,
-      "totalAmount": 195.95,
-      "status": "COMPLETED",
-      "createdAt": "2026-09-05T14:11:06.100Z",
-      "items": [
+  ```
+* **Error Contract:**
+  ```json
+  {
+    "success": false,
+    "error": {
+      "code": "INSUFFICIENT_STOCK",
+      "message": "Insufficient inventory to fulfill order",
+      "details": [
         {
-          "id": "e81d77a2-f8c7-4340-9a4d-0805c862bc38",
-          "productId": "992fbb2e-b611-41e9-a3d8-a8d6b9d628eb",
-          "sku": "ACME-WIDGET-001",
-          "name": "Wireless Ergonomic Keyboard",
-          "quantity": 2,
-          "unitPrice": 89.99,
-          "totalPrice": 179.98
+          "productId": "6e313f2b-e0dd-4ff7-9770-01e6a579d8cd",
+          "sku": "ACME-AUDIO-01",
+          "name": "Wireless Noise-Cancelling Headphones",
+          "availableStock": 2,
+          "requestedQuantity": 5
         }
       ]
     }
   }
-}
+  ```
+
+### 5. Tuned Connection Pooling
+Production-hardened Prisma connection parameters configured for PostgreSQL:
+```
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/stockpulse_inventory?schema=public&connection_limit=10&pool_timeout=20"
+```
+
+### 6. WCAG 2.1 AA Accessibility & Production Audit
+* **100% Keyboard & Screen-Reader Accessible:** All interactive dialogs implement `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` with focus trapping and restore-on-close.
+* **Zero Form Inconsistencies:** Every form control is bound to an explicit `<label htmlFor="...">`.
+* **Automated Audit Suite:** Audited via `npm run test:a11y` during continuous integration.
+
+---
+
+## 🔑 Seeded Demo Credentials
+
+StockPulse seeds two distinct tenant organizations with role-based access control (ADMIN, MANAGER, CASHIER). Default password across all seeded accounts is:
+
+> **Password:** `StockPulse2026!`
+
+| Organization | Role | Email | Permissions & Access Scope |
+|---|---|---|---|
+| **Acme Retail** (`acme-retail`) | **ADMIN** | `admin@acme-retail.com` | Unrestricted catalog CRUD, price mutations, stock adjustments, order desk. |
+| **Acme Retail** (`acme-retail`) | **MANAGER** | `manager@acme-retail.com` | Catalog CRUD, stock reconciliations, order desk. |
+| **Acme Retail** (`acme-retail`) | **CASHIER** | `cashier@acme-retail.com` | Read catalog, place POS checkout orders. Price edits and deletions rejected (403). |
+| **Summit Supplies** (`summit-supplies`) | **ADMIN** | `admin@summit-supplies.com` | Isolated to Summit Supplies tenant. Cross-tenant queries return 404/403. |
+| **Summit Supplies** (`summit-supplies`) | **MANAGER** | `manager@summit-supplies.com` | Summit Supplies inventory & order management. |
+| **Summit Supplies** (`summit-supplies`) | **CASHIER** | `cashier@summit-supplies.com` | Summit Supplies POS terminal. |
+
+---
+
+## 🚀 Quickstart Guide
+
+### Option A: Single-Command Docker Setup (Recommended)
+Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (v20+)
+
+```bash
+# 1. Clone repository
+git clone https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine.git
+cd StockPulse-Multi-Tenant-Inventory-Order-Engine
+
+# 2. Launch complete stack (Postgres + Express API + Next.js Frontend)
+docker compose up --build
+```
+
+The stack automatically boots:
+* 🌐 **Frontend Web App:** [http://localhost:3000](http://localhost:3000)
+* ⚡ **Backend API Server:** [http://localhost:3001](http://localhost:3001)
+* 🐘 **PostgreSQL 16 Database:** `localhost:5432` (`stockpulse_inventory`)
+* 🔁 **Database Migration & Seed:** Automatically executed during startup via container health checks.
+
+To manually re-seed the Docker database at any time:
+```bash
+npm run docker:seed
+# or: bash scripts/docker-seed.sh
 ```
 
 ---
 
-### 6.4 Standardized Error Response Structures
+### Option B: Native Local Development
 
-StockPulse returns consistent, machine-readable JSON error payloads across all failure states:
+Prerequisites: Node.js 20+ and running PostgreSQL 16 on port 5432.
 
-#### 1. `400 Bad Request` (Zod Schema Validation Failure)
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Validation failed for one or more fields",
-    "details": [
-      {
-        "field": "unitPrice",
-        "message": "Unit price must be strictly greater than 0"
-      }
-    ]
-  }
-}
-```
+```bash
+# 1. Install root workspace dependencies
+npm install
 
-#### 2. `401 Unauthorized` (Missing or Invalid Authentication)
-```json
-{
-  "success": false,
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Authentication token missing or invalid"
-  }
-}
-```
+# 2. Generate Prisma client & apply migrations
+npm run db:migrate
 
-#### 3. `403 Forbidden` (RBAC Least Privilege Violation)
-```json
-{
-  "success": false,
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "Access denied: Required role(s): ADMIN, MANAGER. Your role: CASHIER"
-  }
-}
-```
+# 3. Seed multi-tenant demo organizations and inventory
+npm run db:seed
 
-#### 4. `409 Conflict` (Concurrent Inventory Shortage)
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INSUFFICIENT_STOCK",
-    "message": "One or more items do not have sufficient stock to complete this order",
-    "details": [
-      {
-        "productId": "cb129320-d463-43e9-926f-3ab1835d566d",
-        "sku": "RACE-SEC-001",
-        "name": "Limited Edition Mechanical Switch",
-        "availableStock": 1,
-        "requestedQuantity": 2
-      }
-    ]
-  }
-}
+# 4. Start backend API and Next.js frontend concurrently
+npm run dev
 ```
 
 ---
 
-## 7. Concurrency-Safe Checkout Engine (`SELECT ... FOR UPDATE`)
+## 🧪 Automated Verification & Test Suites
 
-### The Problem: Naive Read-Modify-Write Race Conditions
-Under high-volume POS and B2B checkout traffic (e.g., flash sales, wholesale ordering), multiple cashiers or API clients frequently purchase the same SKU simultaneously.
+StockPulse includes automated test suites covering integrity constraints, security isolation, and extreme concurrency:
 
-In a standard ORM or unhardened application:
-1. **Request 1** reads: `Stock = 2`.
-2. **Request 2** reads: `Stock = 2`.
-3. **Request 1** computes `2 - 2 = 0` and writes `Stock = 0`.
-4. **Request 2** computes `2 - 2 = 0` and writes `Stock = 0`.
-5. **Outcome**: 4 units were sold when only 2 existed. If a database check constraint exists, Request 2 crashes with a cryptic SQL failure; without it, the database enters negative inventory, resulting in catastrophic physical overselling.
+```bash
+# 1. Verify WCAG 2.1 AA Accessibility across all components
+npm run test:a11y
 
-### The Solution: Deadlock-Free Pessimistic Row-Locking
+# 2. Verify Database CHECK constraints (negative stock prevention)
+npm run test:constraints
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor POS_1 as Cashier Terminal 1 (Req 1)
-    actor POS_2 as Cashier Terminal 2 (Req 2)
-    participant Engine as Order Engine (Express API)
-    participant PG as PostgreSQL (Storage Engine)
+# 3. Verify Phase 2 Security (BOLA/IDOR, RBAC, 10x concurrent checkout stress test)
+npm run test:phase2
 
-    POS_1->>Engine: POST /api/v1/orders (Qty: 2)
-    POS_2->>Engine: POST /api/v1/orders (Qty: 2)
-    
-    rect rgb(30, 45, 60)
-    Note over Engine,PG: BEGIN TRANSACTION (Tx 1 & Tx 2)
-    Engine->>PG: Tx 1: SELECT ... WHERE id IN (...) FOR UPDATE
-    Engine->>PG: Tx 2: SELECT ... WHERE id IN (...) FOR UPDATE
-    Note over PG: PG locks row for Tx 1.<br/>Tx 2 blocks and waits.
-    end
+# 4. Verify Phase 3 End-to-End API Integration & 409 Shortage Reconciler
+npm run test:phase3
 
-    Note over Engine: Tx 1 verifies: Stock(2) >= 2 ✅
-    Engine->>PG: Tx 1: UPDATE products SET stock_quantity = stock_quantity - 2 (New: 0)
-    Engine->>PG: Tx 1: INSERT INTO orders & order_items
-    Engine->>PG: Tx 1: COMMIT
-    Note over PG: Tx 1 committed. Lock released!
-
-    rect rgb(60, 30, 30)
-    Note over PG: Tx 2 acquires lock and reads committed state: Stock = 0
-    Note over Engine: Tx 2 evaluates: Stock(0) < 2 ❌ SHORTAGE!
-    Engine->>PG: Tx 2: ROLLBACK
-    Engine-->>POS_2: HTTP 409 Conflict (Itemized Shortage Payload)
-    end
-
-    Engine-->>POS_1: HTTP 201 Created (Receipt & Order Items)
+# 5. Full Production Build (TypeScript compile + Next.js optimization)
+npm run build
 ```
 
-### Architectural Pillars:
-1. **Sorted Primary Keys Prevent Deadlocks**:
-   When orders request multiple distinct products (`[P1, P2]` vs `[P2, P1]`), concurrent transactions locking rows in differing orders can trigger PostgreSQL Deadlock Exceptions (`40P01`). StockPulse deterministically sorts all requested product UUIDs alphabetically before executing the row lock:
-   ```sql
-   SELECT id, name, sku, unit_price, stock_quantity, status
-   FROM "products"
-   WHERE id = ANY($1::uuid[]) AND organization_id = $2::uuid
-   ORDER BY id ASC
-   FOR UPDATE;
-   ```
-2. **Immediate Pre-Write Stock Evaluation**:
-   The engine checks `availableStock >= requestedQuantity` for all lines within the active lock. If any shortage is detected, the transaction aborts with an immediate `ROLLBACK`, guaranteeing zero phantom writes.
-3. **Fixed Decimal Arithmetic**:
-   Tax calculations (8.875% standard commercial rate) use fixed decimal arithmetic (`Math.round(...) / 100`) rather than raw floating-point operations to prevent IEEE-754 rounding drift.
-4. **Database CHECK Constraint (`CHECK stock_quantity >= 0`)**:
-   Acts as the ultimate defensive backstop. Even if an application bug bypasses validation, PostgreSQL immediately rejects any operation that would result in negative inventory.
+---
+
+## 🛡️ Automated CI/CD (GitHub Actions)
+
+StockPulse enforces strict quality gates on every push and pull request to `main`:
+* **Matrix Service Container:** Ephemeral `postgres:16-alpine` with healthcheck probing.
+* **Strict Typechecking:** Zero TypeScript errors across `server/` and `frontend/` workspaces.
+* **Accessibility Audit:** Validates accessible names, modal contracts, and form labeling.
+* **Stress Test Suite:** Executes 10 concurrent transactions against 2 items of stock, verifying exactly 1 order succeeds (201) and 9 conflict cleanly (409) with 0 overselling.
+* **Production Build:** Validates Next.js build compilation and static optimization.
 
 ---
 
-## 8. Frontend State Architecture & TanStack Query Integration
-
-StockPulse decouples UI rendering from server state using `@tanstack/react-query`, resilient HTTP interceptors, and accessible modal primitives:
-
-### 8.1 Transactional Checkout & 409 Shortage Reconciliation Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Cashier as Cashier Terminal (POS UI)
-    participant Query as TanStack Query Cache
-    participant API as api-client.ts (Fetch Client)
-    participant Server as Express Engine (:3001)
-    participant DB as PostgreSQL 16 (Row Locks)
-
-    Cashier->>API: Click "Process Payment" (Cart: Item A x2)
-    API->>Server: POST /api/v1/orders with JWT Bearer
-    Server->>DB: BEGIN TRANSACTION<br/>SELECT ... FOR UPDATE (ORDER BY id ASC)
-    
-    alt Concurrent Checkout Detected Shortage
-        Note over DB: Item A available stock is 0 (sold moments ago)
-        Server->>DB: ROLLBACK TRANSACTION
-        Server-->>API: HTTP 409 Conflict (itemized shortage: { available: 0, requested: 2 })
-        API-->>Cashier: Intercept 409 -> Trigger Shortage Conflict Modal
-        Note over Cashier: Cart automatically clamps or purges depleted items.<br/>Non-conflicted items remain intact!
-        Query->>Server: Invalidate ['pos-products'] -> Re-fetch live inventory
-    else Inventory Sufficient
-        Server->>DB: Deduct inventory (UPDATE products)<br/>INSERT INTO orders & order_items<br/>COMMIT TRANSACTION
-        Server-->>API: HTTP 201 Created (Order Receipt)
-        API-->>Cashier: Clear Cart -> Open Accessible Receipt Modal (Focus Trapped)
-        Query->>Server: Invalidate ['products'] & ['pos-products']
-    end
-```
-
-### 8.2 Architectural Highlights
-1. **Zero-Drift Reactivity**:
-   - `useQuery(['products', { page, search, category, status }])` keeps the Stock Catalog synchronized with live server counts without redundant full-page reloads.
-   - Debounced search inputs (300ms) prevent network saturation.
-   - Skeletons prevent Cumulative Layout Shift (CLS) during network fetches.
-2. **Resilient Interceptors (`api-client.ts`)**:
-   - `credentials: 'include'` enforces secure HTTP-only cookie delivery.
-   - `401 Unauthorized` automatically terminates stale sessions and triggers re-authentication.
-   - `403 Forbidden` automatically extracts server policy rejections and triggers user-friendly Toast alerts without throwing unhandled exceptions.
-3. **WCAG 2.1 AA Accessibility Standards**:
-   - **Keyboard Focus Management**: Receipt confirmation modals and conflict dialogs implement full focus traps via `useFocusTrap` (`Tab`, `Shift+Tab`, and `Esc` to dismiss).
-   - **Accessible Live Announcements**: Stock changes, cart operations, and shortages announce asynchronously via `role="alert"` / `aria-live="polite"`.
-   - **Visible Focus Rings**: All interactive controls feature `focus-visible:ring-2 focus-visible:ring-ring`.
-
----
-
-## 9. Seed Accounts
-
-All accounts are pre-seeded with bcrypt-hashed passwords (10 salt rounds): **`StockPulse2026!`**.
-
-| Tenant Organization | Tenant Slug | User Email | Role | Sample Stock Items |
-|---|---|---|---|---|
-| **Acme Retail** | `acme-retail` | `admin@acme-retail.com` | `ADMIN` | In Stock (Headphones, Chargers) |
-| Acme Retail | `acme-retail` | `manager@acme-retail.com` | `MANAGER` | Low Stock (Aprons, Coffee Beans) |
-| Acme Retail | `acme-retail` | `cashier@acme-retail.com` | `CASHIER` | Out of Stock (Thermal Printers) |
-| **Summit Supplies** | `summit-supplies` | `admin@summit-supplies.com` | `ADMIN` | In Stock (Bolt Sets, Glasses) |
-| Summit Supplies | `summit-supplies` | `manager@summit-supplies.com` | `MANAGER` | Low Stock (Respirators) |
-| Summit Supplies | `summit-supplies` | `cashier@summit-supplies.com` | `CASHIER` | Out of Stock (Framing Nailers) |
-
----
-
-## License
-ISC License. Built for high-reliability multi-tenant supply chain and B2B point-of-sale infrastructure.
-
+## 📄 License
+This project is licensed under the [MIT License](LICENSE).

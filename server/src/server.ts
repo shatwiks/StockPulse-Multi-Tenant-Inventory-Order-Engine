@@ -88,13 +88,21 @@ app.use('/api/v1', apiRoutes);
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({
-    error: 'NOT_FOUND',
+    success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: `Cannot ${req.method} ${req.path}`,
+    },
     message: `Cannot ${req.method} ${req.path}`,
   });
 });
 
 // Start Server if executed directly
-if (process.env.NODE_ENV !== 'test') {
+const isDirectExecution =
+  require.main === module ||
+  (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js')));
+
+if (process.env.NODE_ENV !== 'test' && isDirectExecution) {
   app.listen(PORT, () => {
     console.log(`===============================================================`);
     console.log(`⚡ StockPulse API Server listening on http://localhost:${PORT}`);

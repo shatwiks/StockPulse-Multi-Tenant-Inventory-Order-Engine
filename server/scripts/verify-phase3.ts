@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import prisma from '../src/db/client';
 import { generateToken } from '../src/middleware/auth';
 import { app } from '../src/server';

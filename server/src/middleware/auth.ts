@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../types/express';
+import { sendError } from '../utils/response';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'enterprise-grade-stockpulse-jwt-secret-key-replace-in-production';
 const JWT_EXPIRES_IN = '24h';
@@ -37,35 +38,35 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   }
 
   if (!token) {
-    res.status(401).json({
-      success: false,
-      error: 'UNAUTHORIZED',
-      message: 'Authentication required. Missing Bearer token in Authorization header or cookie.',
-    });
-    return;
+    return void sendError(
+      res,
+      'UNAUTHORIZED',
+      'Authentication required. Missing Bearer token in Authorization header or cookie.',
+      401
+    );
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
 
     if (!decoded.userId || !decoded.organizationId || !decoded.role) {
-      res.status(401).json({
-        success: false,
-        error: 'INVALID_TOKEN_PAYLOAD',
-        message: 'Token payload is missing required tenant claims (userId, organizationId, role).',
-      });
-      return;
+      return void sendError(
+        res,
+        'INVALID_TOKEN_PAYLOAD',
+        'Token payload is missing required tenant claims (userId, organizationId, role).',
+        401
+      );
     }
 
     // UUID format check on organizationId to prevent injection attacks
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(decoded.organizationId)) {
-      res.status(403).json({
-        success: false,
-        error: 'INVALID_TENANT_ID',
-        message: 'Invalid organizationId format in token claims.',
-      });
-      return;
+      return void sendError(
+        res,
+        'INVALID_TENANT_ID',
+        'Invalid organizationId format in token claims.',
+        403
+      );
     }
 
     req.user = {
@@ -80,18 +81,19 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
     next();
   } catch (err: any) {
     if (err.name === 'TokenExpiredError') {
-      res.status(401).json({
-        success: false,
-        error: 'TOKEN_EXPIRED',
-        message: 'Authentication token has expired. Please re-authenticate.',
-      });
-      return;
+      return void sendError(
+        res,
+        'TOKEN_EXPIRED',
+        'Authentication token has expired. Please re-authenticate.',
+        401
+      );
     }
 
-    res.status(401).json({
-      success: false,
-      error: 'INVALID_TOKEN',
-      message: 'Authentication token signature verification failed.',
-    });
+    return void sendError(
+      res,
+      'INVALID_TOKEN',
+      'Authentication token signature verification failed.',
+      401
+    );
   }
 }
