@@ -8,10 +8,13 @@ import { MobileDrawer } from './mobile-drawer'
 import { SidebarContent } from './sidebar-content'
 import { TopBar } from './top-bar'
 import { RecruiterPersonaBar } from './recruiter-persona-bar'
+import { StickyMobileBar } from './sticky-mobile-bar'
+import { ContactSupportModal } from './contact-support-modal'
 
 export function DashboardShell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
   const [activeKey, setActiveKey] = useState('inventory')
   const [tenant, setTenant] = useState<Tenant>(tenants[0])
 
@@ -50,6 +53,7 @@ export function DashboardShell() {
           onTenantChange={setTenant}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((prev) => !prev)}
+          onOpenSupport={() => setSupportOpen(true)}
         />
       </aside>
 
@@ -65,6 +69,10 @@ export function DashboardShell() {
           tenant={tenant}
           onTenantChange={setTenant}
           mobile
+          onOpenSupport={() => {
+            setMobileOpen(false)
+            setSupportOpen(true)
+          }}
         />
       </MobileDrawer>
 
@@ -82,7 +90,7 @@ export function DashboardShell() {
           currentTenant={tenant}
           onTenantChange={setTenant}
         />
-        <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
+        <main id="main-content" tabIndex={-1} className="flex-1 outline-none pb-16 lg:pb-0">
           <ContentArea
             activeKey={activeKey}
             onNavigate={handleNavigate}
@@ -90,6 +98,19 @@ export function DashboardShell() {
           />
         </main>
       </div>
+
+      {/* Mobile Sticky CTA Bar */}
+      <StickyMobileBar
+        activeKey={activeKey}
+        onNavigate={handleNavigate}
+        onOpenSupport={() => setSupportOpen(true)}
+      />
+
+      {/* 24/7 Logistics Support & HQ Modal */}
+      <ContactSupportModal
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+      />
     </div>
   )
 }

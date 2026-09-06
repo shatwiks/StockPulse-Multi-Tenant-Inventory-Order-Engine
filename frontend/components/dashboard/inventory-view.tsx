@@ -641,7 +641,7 @@ export function InventoryView({ tenant }: InventoryViewProps) {
                         <div className="relative size-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                           <Image
                             src={getCategoryImage(product.category, product.categoryName)}
-                            alt=""
+                            alt={`${product.name} product photo`}
                             width={40}
                             height={40}
                             className="size-10 object-cover"

@@ -621,7 +621,7 @@ export function OrderDeskView({ tenant }: OrderDeskViewProps) {
                       <div className="relative h-24 w-full rounded-xl overflow-hidden bg-muted/40 border border-border/60 mb-2.5 flex items-center justify-center">
                         <Image
                           src={getCategoryImage(p.category, p.categoryName)}
-                          alt=""
+                          alt={`${p.name} catalog photo`}
                           width={80}
                           height={80}
                           className="size-16 object-contain group-hover:scale-105 transition-transform"

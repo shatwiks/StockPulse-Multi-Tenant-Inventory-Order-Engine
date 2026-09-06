@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { QueryProvider } from '@/components/query-provider'
 import { ToastProvider } from '@/lib/toast-context'
 import { AuthProvider } from '@/lib/auth-context'
+import { CookieBanner } from '@/components/ui/cookie-banner'
 import './globals.css'
 
 const outfit = Outfit({
@@ -25,6 +26,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://stockpulse.bharat-retail.in'),
   title: 'StockPulse — Multi-Tenant Inventory & Order Engine',
   description:
     'Enterprise B2B inventory management and point-of-sale order engine for multi-tenant organizations.',
@@ -76,7 +78,10 @@ export default function RootLayout({
         >
           <QueryProvider>
             <ToastProvider>
-              <AuthProvider>{children}</AuthProvider>
+              <AuthProvider>
+                {children}
+                <CookieBanner />
+              </AuthProvider>
             </ToastProvider>
           </QueryProvider>
         </ThemeProvider>

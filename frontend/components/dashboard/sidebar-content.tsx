@@ -1,6 +1,7 @@
 'use client'
 
-import { PanelLeftClose, PanelLeft } from 'lucide-react'
+import Link from 'next/link'
+import { PanelLeftClose, PanelLeft, Headset, Shield, FileText } from 'lucide-react'
 import { navItems } from '@/lib/nav'
 import type { Tenant } from '@/lib/nav'
 import { cn } from '@/lib/utils'
@@ -17,6 +18,7 @@ type SidebarContentProps = {
   onToggleCollapse?: () => void
   /** True when rendered inside the mobile drawer. */
   mobile?: boolean
+  onOpenSupport?: () => void
 }
 
 export function SidebarContent({
@@ -27,6 +29,7 @@ export function SidebarContent({
   collapsed = false,
   onToggleCollapse,
   mobile = false,
+  onOpenSupport,
 }: SidebarContentProps) {
   return (
     <div className="flex h-full flex-col gap-3.5 p-3">
@@ -106,6 +109,36 @@ export function SidebarContent({
           })}
         </ul>
       </nav>
+
+      {/* Support & Hub Contact */}
+      {onOpenSupport && (
+        <button
+          type="button"
+          onClick={onOpenSupport}
+          className={cn(
+            'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors',
+            collapsed && 'justify-center px-0'
+          )}
+          title={collapsed ? 'Logistics Support Hub' : undefined}
+          aria-label="Open 24/7 Logistics Support Hub"
+        >
+          <Headset className="size-4 shrink-0 text-amber-500" aria-hidden="true" />
+          {!collapsed && <span>Support Hub &amp; HQ</span>}
+        </button>
+      )}
+
+      {/* Legal Links (Collapsed: hidden, Expanded: tiny footer links) */}
+      {!collapsed && (
+        <div className="flex items-center justify-between px-2 text-[10px] text-stone-300">
+          <Link href="/privacy" className="hover:text-amber-400 transition-colors">
+            Privacy Policy
+          </Link>
+          <span>•</span>
+          <Link href="/terms" className="hover:text-amber-400 transition-colors">
+            Terms of SLA
+          </Link>
+        </div>
+      )}
 
       {!mobile && onToggleCollapse && (
         <button
