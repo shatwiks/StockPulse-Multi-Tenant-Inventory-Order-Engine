@@ -42,7 +42,21 @@
 
 The StockPulse interface is engineered with a dark-walnut and warm-amber aesthetic (`#F59E0B`, `#1F1A17`), adhering strictly to WCAG 2.1 AA contrast standards, zero-layout-shift (CLS) states, and ergonomic keyboard navigation (`⌘K` command palette).
 
-### 1. Enterprise Operations Hub & Recruiter Persona Switcher
+### 1. Interactive 3D Warehouse Engine & Authentication Console
+![StockPulse 3D Warehouse Engine & Login Console](docs/screenshots/00-login-3d-telemetry.png)
+
+* **Interactive 3D Isometric Warehouse Cube:** Real-time Three.js viewport featuring an isometric architectural cargo cube rendered with physically based materials (deep walnut `#1F1A17` & burnt copper `#D97706`). A sharp glowing heartbeat pulse line cuts through the front facet and traces along its corner edges, symbolizing real-time stock synchronization and pessimistic locks. Operators can mouse-tilt and drag-rotate the 3D cube with smooth damping.
+* **Live Concurrency Telemetry HUD:** Floating real-time status overlay (`PULSE TELEMETRY: ATOMIC_LOCK_ACTIVE`), telemetry ping counters, active cloud region indicators (`AP-South-1 Mumbai` • `11ms`), and system status monitor (`ALL ENGINES ONLINE`).
+* **1-Click Evaluation Persona Quick-Picker:** Reviewers can authenticate instantly without typing passwords by selecting pre-seeded personas:
+  * **Aarav Sharma (`ADMIN` - Bharat Logistics):** Complete tenant governance, multi-warehouse catalog management, and organization settings.
+  * **Bob Miller (`MANAGER` - Bharat Logistics):** Stock level adjustments, bulk reordering, and physical count reconciliations.
+  * **Charlie Davis (`CASHIER` - Bharat Logistics):** High-throughput POS checkout terminal and instant receipt generation.
+  * **Suresh Reddy (`ADMIN` - Deccan Supply Chain):** Demonstrates zero-trust database row-level isolation across a distinct, air-gapped organization tenant.
+* **Enterprise Security Credentials:** Work email and password authentication with demo key auto-fill (`StockPulse2026!`), session persistence, and Enterprise SAML 2.0 readiness.
+
+---
+
+### 2. Enterprise Operations Hub & Recruiter Persona Switcher
 ![StockPulse Enterprise Operations Hub](docs/screenshots/01-operations-dashboard.png)
 
 * **Recruiter Quick Persona Switcher:** Located at the top of the console, reviewers can switch between pre-seeded personas (`Aarav Sharma - ADMIN`, `Priya Patel - MANAGER`, `Rohan Verma - CASHIER`, and cross-tenant `Ananya - ADMIN`) with a single click, immediately testing RBAC permission enforcement without manual sign-outs.
@@ -51,7 +65,7 @@ The StockPulse interface is engineered with a dark-walnut and warm-amber aesthet
 
 ---
 
-### 2. High-Density Stock Catalog & Inventory Ledger
+### 3. High-Density Stock Catalog & Inventory Ledger
 ![StockPulse Stock Catalog & Inventory Ledger](docs/screenshots/02-inventory-ledger.png)
 
 * **Real-Time Tabular Ledger:** Powered by TanStack Query with optimistic cache updates and server-side row-level locks. Features 40×40 product thumbnails, SKU indexing, and currency formatted in Indian Rupees (`₹`).
@@ -60,7 +74,7 @@ The StockPulse interface is engineered with a dark-walnut and warm-amber aesthet
 
 ---
 
-### 3. Enterprise Analytics & Inventory Capital Cockpit
+### 4. Enterprise Analytics & Inventory Capital Cockpit
 ![StockPulse Enterprise Analytics & Inventory Capital](docs/screenshots/03-enterprise-analytics.png)
 
 * **Executive KPI Cards:** Real-time calculation of **Gross Revenue** (`₹15,335.28` with period comparison), **Order Fulfillment & AOV**, **Inventory Capital Allocation** (`₹4,52,616.00` across active units), and overall **Catalog Health Score** (`57% Optimal`).
@@ -70,7 +84,7 @@ The StockPulse interface is engineered with a dark-walnut and warm-amber aesthet
 
 ---
 
-### 4. Organization Identity, Infrastructure & Personnel Controls
+### 5. Organization Identity, Infrastructure & Personnel Controls
 ![StockPulse Organization Identity & Tenant Controls](docs/screenshots/04-organization-identity-personnel.png)
 
 * **Tenant Isolation Identity:** Details legal enterprise metadata for `Bharat Logistics & Retail` (`tenant_slug: bharat-retail`), displaying the immutable Tenant UUID, subscription tier, and partition status.
@@ -79,7 +93,7 @@ The StockPulse interface is engineered with a dark-walnut and warm-amber aesthet
 
 ---
 
-### 5. Principle of Least Privilege (RBAC Matrix) & Operational Preferences
+### 6. Principle of Least Privilege (RBAC Matrix) & Operational Preferences
 ![StockPulse RBAC Matrix & Tenant Operational Preferences](docs/screenshots/05-rbac-matrix-tenant-preferences.png)
 
 * **Granular RBAC Enforcement Matrix:** Visually audits the active permission boundaries across all 3 roles (`Cashier`, `Manager`, `Admin`), illustrating capability gating for catalog browsing, POS checkout, SKU adjustments, category creation, analytics access, and tenant governance.
