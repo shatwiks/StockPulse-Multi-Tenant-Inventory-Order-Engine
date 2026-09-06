@@ -38,6 +38,55 @@
 
 ---
 
+## 📸 Visual Walkthrough & System Tour
+
+The StockPulse interface is engineered with a dark-walnut and warm-amber aesthetic (`#F59E0B`, `#1F1A17`), adhering strictly to WCAG 2.1 AA contrast standards, zero-layout-shift (CLS) states, and ergonomic keyboard navigation (`⌘K` command palette).
+
+### 1. Enterprise Operations Hub & Recruiter Persona Switcher
+![StockPulse Enterprise Operations Hub](docs/screenshots/01-operations-dashboard.png)
+
+* **Recruiter Quick Persona Switcher:** Located at the top of the console, reviewers can switch between pre-seeded personas (`Aarav Sharma - ADMIN`, `Priya Patel - MANAGER`, `Rohan Verma - CASHIER`, and cross-tenant `Ananya - ADMIN`) with a single click, immediately testing RBAC permission enforcement without manual sign-outs.
+* **Dual-Engine Navigation:** Direct access cards routing operators between **View 1: High-Density Inventory Ledger** and **View 2: High-Throughput POS Checkout Terminal**.
+* **Live System Telemetry:** The header displays active cloud region (`AP-South-1 Mumbai`), real-time ping latency, 99.99% uptime status, and the interactive Concurrency Stress-Test launcher.
+
+---
+
+### 2. High-Density Stock Catalog & Inventory Ledger
+![StockPulse Stock Catalog & Inventory Ledger](docs/screenshots/02-inventory-ledger.png)
+
+* **Real-Time Tabular Ledger:** Powered by TanStack Query with optimistic cache updates and server-side row-level locks. Features 40×40 product thumbnails, SKU indexing, and currency formatted in Indian Rupees (`₹`).
+* **Visual Stock Health Bars:** Proportional progress bars display real-time physical stock vs. automated reorder thresholds, paired with high-contrast WCAG AA status pills (`In Stock`, `Low Stock`, `Out of Stock`).
+* **Instant Filtering & Search:** Sub-300ms debounced catalog search across SKUs and titles, dynamic category filtering, CSV export, and modal dialogs for SKU addition and restock reconciliation.
+
+---
+
+### 3. Enterprise Analytics & Inventory Capital Cockpit
+![StockPulse Enterprise Analytics & Inventory Capital](docs/screenshots/03-enterprise-analytics.png)
+
+* **Executive KPI Cards:** Real-time calculation of **Gross Revenue** (`₹15,335.28` with period comparison), **Order Fulfillment & AOV**, **Inventory Capital Allocation** (`₹4,52,616.00` across active units), and overall **Catalog Health Score** (`57% Optimal`).
+* **14-Day Sales Velocity & Invoicing Chart:** Daily checkout bar graph visualizing throughput trends and order velocity across selectable windows (`7D`, `14D`, `30D`, `YTD`).
+* **Statutory Indian GST Engine:** Automated bifurcation of all checkout totals into Central GST (`9% CGST`) and State GST (`9% SGST`) ledger entries.
+* **Category Capital Allocation:** Horizontal progress metrics tracking capital concentration across taxonomies (`Enterprise Electronics & POS`, `Warehouse & Logistics Gear`, `Corporate Pantry`).
+
+---
+
+### 4. Organization Identity, Infrastructure & Personnel Controls
+![StockPulse Organization Identity & Tenant Controls](docs/screenshots/04-organization-identity-personnel.png)
+
+* **Tenant Isolation Identity:** Details legal enterprise metadata for `Bharat Logistics & Retail` (`tenant_slug: bharat-retail`), displaying the immutable Tenant UUID, subscription tier, and partition status.
+* **Infrastructure & Compliance Parameters:** Grounded in cloud region `AP-South-1 (Mumbai)` with native `INR (₹)` operational currency, 18% GST tax rules, and contractual 99.99% High Availability SLA.
+* **Tenant Personnel & Credentials Roster:** Manages organization members, verified email credentials, active status badges, and assigned administrative tiers (`Full Governance & Invoicing`, `Inventory & Stock Restocking`, `Order Checkout & Invoicing`).
+
+---
+
+### 5. Principle of Least Privilege (RBAC Matrix) & Operational Preferences
+![StockPulse RBAC Matrix & Tenant Operational Preferences](docs/screenshots/05-rbac-matrix-tenant-preferences.png)
+
+* **Granular RBAC Enforcement Matrix:** Visually audits the active permission boundaries across all 3 roles (`Cashier`, `Manager`, `Admin`), illustrating capability gating for catalog browsing, POS checkout, SKU adjustments, category creation, analytics access, and tenant governance.
+* **Tenant Operational Preferences:** Configurable automated low-stock alert thresholds (triggering dashboard warning badges), automated digital GST tax receipt generation, and critical stock exhaustion notification triggers.
+
+---
+
 ## 💻 Local Development & Quickstart
 
 ### Prerequisites
