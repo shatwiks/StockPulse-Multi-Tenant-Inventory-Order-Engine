@@ -45,6 +45,45 @@ export const categoryImage: Record<string, string> = Object.fromEntries([
   ['Heavy Machinery Tools', '/products/power-tools.png'],
 ])
 
+/**
+ * Smart category image resolver.
+ * Handles tenant-prefixed slugs from the API (e.g. "bharat-electronics", "deccan-safety")
+ * by pattern-matching against known image keywords.
+ */
+const imageKeywords: [string, string][] = [
+  ['electronic', '/products/electrical.png'],
+  ['pos', '/products/electrical.png'],
+  ['safety', '/products/safety.png'],
+  ['protective', '/products/safety.png'],
+  ['logistics', '/products/power-tools.png'],
+  ['warehouse', '/products/power-tools.png'],
+  ['pantry', '/products/fluids.png'],
+  ['coffee', '/products/fluids.png'],
+  ['essential', '/products/fluids.png'],
+  ['hardware', '/products/fasteners.png'],
+  ['fastener', '/products/fasteners.png'],
+  ['bolt', '/products/fasteners.png'],
+  ['adhesive', '/products/adhesives.png'],
+  ['power-tool', '/products/power-tools.png'],
+  ['tool', '/products/power-tools.png'],
+  ['fluid', '/products/fluids.png'],
+  ['electrical', '/products/electrical.png'],
+]
+
+export function getCategoryImage(categoryKey: string, categoryName?: string): string {
+  // 1. Direct lookup
+  if (categoryImage[categoryKey]) return categoryImage[categoryKey]
+
+  // 2. Fuzzy keyword match against slug + name
+  const haystack = `${categoryKey} ${categoryName || ''}`.toLowerCase()
+  for (const [keyword, image] of imageKeywords) {
+    if (haystack.includes(keyword)) return image
+  }
+
+  // 3. Fallback
+  return '/products/electrical.png'
+}
+
 export interface Product {
   id: string
   organizationId?: string
@@ -73,7 +112,15 @@ export interface Product {
 export function normalizeProduct(p: any): Product {
   const stock = typeof p.stockQuantity === 'number' ? p.stockQuantity : (p.stock ?? 0)
   const reorderPoint = typeof p.reorderLevel === 'number' ? p.reorderLevel : (p.reorderPoint ?? 10)
-  const price = typeof p.unitPrice === 'number' ? p.unitPrice : (p.price ?? 0)
+
+  // Prisma Decimal fields serialize as STRINGS over JSON (e.g. "2499.00" not 2499).
+  // parseFloat handles both string and number inputs correctly.
+  const rawPrice = p.unitPrice ?? p.price ?? 0
+  const price = typeof rawPrice === 'number' ? rawPrice : parseFloat(rawPrice) || 0
+
+  const rawCost = p.costPrice
+  const costPrice = rawCost != null ? (typeof rawCost === 'number' ? rawCost : parseFloat(rawCost) || 0) : undefined
+
   const categoryName = p.category?.name || p.category || 'General'
 
   return {
@@ -87,7 +134,7 @@ export function normalizeProduct(p: any): Product {
     categoryName: categoryName,
     price: price,
     unitPrice: price,
-    costPrice: p.costPrice ?? undefined,
+    costPrice: costPrice,
     stock: stock,
     stockQuantity: stock,
     reorderPoint: reorderPoint,

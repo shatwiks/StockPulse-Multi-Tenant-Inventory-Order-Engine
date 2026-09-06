@@ -16,7 +16,12 @@
     "test:constraints": "node --import tsx scripts/verify-constraints.ts",
     "test:checkout": "node --import tsx scripts/test-concurrent-checkout.ts",
     "test:phase2": "node --import tsx scripts/verify-phase2.ts",
-    "test:phase3": "node --import tsx scripts/verify-phase3.ts"
+    "test:phase3": "node --import tsx scripts/verify-phase3.ts",
+    "test:categories": "node --import tsx scripts/verify-categories.ts",
+    "test:analytics-org": "node --import tsx scripts/verify-analytics-org.ts",
+    "test:concurrency-demo": "node --import tsx scripts/verify-concurrency-demo.ts",
+    "test:health": "node --import tsx scripts/verify-system-health.ts",
+    "test:docs": "node --import tsx scripts/verify-api-docs.ts"
   },
   "prisma": {
     "seed": "node --import tsx prisma/seed.ts"

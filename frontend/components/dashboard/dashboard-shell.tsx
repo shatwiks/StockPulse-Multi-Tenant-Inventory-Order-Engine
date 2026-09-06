@@ -7,6 +7,7 @@ import { ContentArea } from './content-area'
 import { MobileDrawer } from './mobile-drawer'
 import { SidebarContent } from './sidebar-content'
 import { TopBar } from './top-bar'
+import { RecruiterPersonaBar } from './recruiter-persona-bar'
 
 export function DashboardShell() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -76,6 +77,10 @@ export function DashboardShell() {
           onTenantChange={setTenant}
           activeKey={activeKey}
           onNavigate={handleNavigate}
+        />
+        <RecruiterPersonaBar
+          currentTenant={tenant}
+          onTenantChange={setTenant}
         />
         <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
           <ContentArea

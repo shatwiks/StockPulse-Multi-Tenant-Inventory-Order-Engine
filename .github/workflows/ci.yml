@@ -122,6 +122,33 @@ jobs:
           NODE_ENV: test
           PORT: 3001
 
+      - name: Run Concurrency Stress-Test Verification
+        working-directory: server
+        run: npx tsx scripts/verify-concurrency-demo.ts
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          NODE_ENV: test
+          PORT: 3001
+
+      - name: Run System Telemetry & Connection Pool Health Verification
+        working-directory: server
+        run: npx tsx scripts/verify-system-health.ts
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          NODE_ENV: test
+          PORT: 3001
+
+      - name: Run Architecture Records (ADRs) & OpenAPI 3.0 Verification
+        working-directory: server
+        run: npx tsx scripts/verify-api-docs.ts
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          NODE_ENV: test
+          PORT: 3001
+
       - name: Build Production Artifacts (Server)
         working-directory: server
         run: npm run build

@@ -1,26 +1,97 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <style>
-    @media (prefers-color-scheme: light) {
-      .background { fill: black; }
-      .foreground { fill: white; }
-    }
-    @media (prefers-color-scheme: dark) {
-      .background { fill: white; }
-      .foreground { fill: black; }
-    }
-  </style>
-  <g clip-path="url(#clip0_7960_43945)">
-    <rect class="background" width="180" height="180" rx="37" />
-    <g style="transform: scale(95%); transform-origin: center">
-      <path class="foreground"
-        d="M101.141 53H136.632C151.023 53 162.689 64.6662 162.689 79.0573V112.904H148.112V79.0573C148.112 78.7105 148.098 78.3662 148.072 78.0251L112.581 112.898C112.701 112.902 112.821 112.904 112.941 112.904H148.112V126.672H112.941C98.5504 126.672 86.5638 114.891 86.5638 100.5V66.7434H101.141V100.5C101.141 101.15 101.191 101.792 101.289 102.422L137.56 66.7816C137.255 66.7563 136.945 66.7434 136.632 66.7434H101.141V53Z" />
-      <path class="foreground"
-        d="M65.2926 124.136L14 66.7372H34.6355L64.7495 100.436V66.7372H80.1365V118.47C80.1365 126.278 70.4953 129.958 65.2926 124.136Z" />
-    </g>
-  </g>
+<svg width="180" height="180" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <clipPath id="clip0_7960_43945">
-      <rect width="180" height="180" fill="white" />
-    </clipPath>
+    <filter id="iconPulseGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <linearGradient id="iconTopFacet" x1="100" y1="20" x2="100" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#382B22" />
+      <stop offset="50%" stopColor="#2B2118" />
+      <stop offset="100%" stopColor="#1F1A17" />
+    </linearGradient>
+
+    <linearGradient id="iconLeftFacet" x1="28" y1="56" x2="100" y2="176" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#2A221C" />
+      <stop offset="100%" stopColor="#14100E" />
+    </linearGradient>
+
+    <linearGradient id="iconRightFacet" x1="100" y1="92" x2="172" y2="176" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#2F251E" />
+      <stop offset="100%" stopColor="#1A1512" />
+    </linearGradient>
+
+    <linearGradient id="iconPulseCore" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#F59E0B" />
+      <stop offset="40%" stopColor="#FBBF24" />
+      <stop offset="80%" stopColor="#D97706" />
+      <stop offset="100%" stopColor="#F59E0B" />
+    </linearGradient>
   </defs>
+
+  {/* Base Background Rounded Tile */}
+  <rect width="200" height="200" rx="42" fill="#171310" stroke="#2B2118" stroke-width="2" />
+
+  {/* Floor Shadow */}
+  <ellipse cx="100" cy="174" rx="64" ry="16" fill="#000000" opacity="0.6" />
+
+  {/* Top Facet */}
+  <polygon points="100,32 168,70 100,108 32,70" fill="url(#iconTopFacet)" stroke="#4A3B2F" stroke-width="1.5" />
+  <line x1="66" y1="51" x2="134" y2="89" stroke="#F59E0B" stroke-opacity="0.25" stroke-width="1.2" />
+  <polygon points="100,60 120,71 100,83 80,71" fill="#14100E" stroke="#F59E0B" stroke-opacity="0.4" stroke-width="1" />
+
+  {/* Left Facet */}
+  <polygon points="32,70 100,108 100,174 32,136" fill="url(#iconLeftFacet)" stroke="#2B2118" stroke-width="1.5" />
+  <line x1="32" y1="104" x2="100" y2="142" stroke="#F59E0B" stroke-opacity="0.15" stroke-width="1" stroke-dasharray="3 4" />
+
+  {/* Right Facet */}
+  <polygon points="100,108 168,70 168,136 100,174" fill="url(#iconRightFacet)" stroke="#3D3025" stroke-width="1.5" />
+  <line x1="100" y1="142" x2="168" y2="104" stroke="#F59E0B" stroke-opacity="0.15" stroke-width="1" stroke-dasharray="3 4" />
+
+  {/* Edge Highlights */}
+  <polyline points="32,70 100,32 168,70" stroke="#FBBF24" stroke-opacity="0.6" stroke-width="2" />
+  <line x1="100" y1="108" x2="100" y2="174" stroke="#F59E0B" stroke-opacity="0.4" stroke-width="1.5" />
+
+  {/* Glowing Pulse / Heartbeat Cut along front face and edge */}
+  <path
+    d="M 40,126 L 68,112 L 78,112 L 84,98 L 90,124 L 96,112 L 100,112 L 108,112 L 118,76 L 126,140 L 134,98 L 140,112 L 148,112 L 164,102"
+    stroke="#0D0A08"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M 40,126 L 68,112 L 78,112 L 84,98 L 90,124 L 96,112 L 100,112 L 108,112 L 118,76 L 126,140 L 134,98 L 140,112 L 148,112 L 164,102"
+    stroke="#F59E0B"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#iconPulseGlow)"
+    opacity="0.8"
+  />
+
+  <path
+    d="M 40,126 L 68,112 L 78,112 L 84,98 L 90,124 L 96,112 L 100,112 L 108,112 L 118,76 L 126,140 L 134,98 L 140,112 L 148,112 L 164,102"
+    stroke="url(#iconPulseCore)"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M 40,126 L 68,112 L 78,112 L 84,98 L 90,124 L 96,112 L 100,112 L 108,112 L 118,76 L 126,140 L 134,98 L 140,112 L 148,112 L 164,102"
+    stroke="#FFFBEB"
+    stroke-width="1.2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  {/* Concurrency Lock Nodes */}
+  <circle cx="100" cy="32" r="3" fill="#FBBF24" filter="url(#iconPulseGlow)" />
+  <circle cx="118" cy="76" r="3.5" fill="#FBBF24" filter="url(#iconPulseGlow)" />
+  <circle cx="126" cy="140" r="3" fill="#D97706" />
 </svg>

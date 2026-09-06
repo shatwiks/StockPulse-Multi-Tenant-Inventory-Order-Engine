@@ -1,20 +1,27 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist_Mono, Outfit, Plus_Jakarta_Sans } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { QueryProvider } from '@/components/query-provider'
 import { ToastProvider } from '@/lib/toast-context'
 import { AuthProvider } from '@/lib/auth-context'
 import './globals.css'
 
-const geistSans = Geist({
+const outfit = Outfit({
   subsets: ['latin'],
-  variable: '--font-geist-sans',
+  variable: '--font-outfit',
+  weight: ['400', '500', '600', '700', '800'],
 })
 
 const geistMono = Geist_Mono({
   subsets: ['latin'],
   variable: '--font-geist-mono',
+})
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-jakarta',
+  weight: ['400', '500', '600', '700', '800'],
 })
 
 export const metadata: Metadata = {
@@ -44,8 +51,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'light dark',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#efe6d6' },
-    { media: '(prefers-color-scheme: dark)', color: '#20180f' },
+    { media: '(prefers-color-scheme: light)', color: '#f3e8e2' },
+    { media: '(prefers-color-scheme: dark)', color: '#171310' },
   ],
 }
 
@@ -58,7 +65,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} bg-background`}
+      className={`${outfit.variable} ${geistMono.variable} ${plusJakartaSans.variable} bg-background`}
     >
       <body className="font-sans antialiased">
         <ThemeProvider

@@ -33,3 +33,7 @@ Thumbs.db
 
 # TypeScript build info cache
 *.tsbuildinfo
+
+# Binaries
+*.exe
+*.dll

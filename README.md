@@ -180,22 +180,38 @@ The database is seeded with two multi-tenant organizations configured with Role-
 StockPulse includes automated test suites covering access control, schema invariants, and high-concurrency race conditions:
 
 ```bash
-# 1. Execute WCAG 2.1 AA accessibility audit across all 19 frontend components
-npm run test:a11y
+# Run the complete test suite across all 8 quality gates:
+npm run test:all
 
-# 2. Verify database CHECK constraints (asserts failure on negative stock writes)
-npm run test:constraints
-
-# 3. Verify security isolation (BOLA/IDOR, RBAC, and 10x concurrent checkout stress test)
-npm run test:phase2
-
-# 4. Verify end-to-end API integration and 409 conflict reconciliation flow
-npm run test:phase3
-
-# 5. Run full workspace production build (TypeScript strict check + Next.js build)
-npm run build
-
+# Or run individual verification suites:
+npm run test:constraints       # Asserts database CHECK constraint integrity
+npm run test:checkout          # Automated 10-thread concurrent race condition test
+npm run test:phase2            # Cross-tenant isolation & RBAC hierarchy
+npm run test:phase3            # Deadlock prevention & multi-item order creation
+npm run test:concurrency-demo  # Live concurrency stress-tester API verification
+npm run test:health            # Real-time PostgreSQL pool & telemetry SLA test
+npm run test:docs              # OpenAPI 3.0 spec & ADR architectural records
+npm run test:a11y              # 100% WCAG 2.1 AA accessibility audit (64 controls)
 ```
+
+---
+
+## 🏛️ Architecture Decision Records (ADRs)
+
+Staff and Principal-level design decisions and mathematical invariant proofs are documented in the [`docs/adr/`](./docs/adr/README.md) directory:
+
+* [**ADR-001: Pessimistic Row-Level Locking for Concurrent Checkouts**](./docs/adr/ADR-001-pessimistic-concurrency-control.md): Analysis of Pessimistic Row Locking (`SELECT ... FOR UPDATE`) vs Optimistic Concurrency Control (OCC) vs Distributed Locks (Redis Redlock), evaluating network partitions, clock skew, and inventory conservation invariants.
+* [**ADR-002: Multi-Tenant Data Partitioning & Isolation Strategy**](./docs/adr/ADR-002-multi-tenant-partitioning-strategy.md): Analysis of Database-per-tenant vs Schema-per-tenant vs Shared Database with Discriminator Column (`organization_id`), composite index design, and 3-layer defense-in-depth isolation.
+* [**ADR-003: Deterministic Lock Acquisition Ordering for Deadlock Elimination**](./docs/adr/ADR-003-deadlock-prevention-lock-ordering.md): Mathematical proof eliminating Coffman cyclic wait condition ($C_4$) through deterministic lexicographical ascending sorting (`ORDER BY id ASC`).
+
+---
+
+## 📚 Interactive OpenAPI 3.0 Documentation
+
+StockPulse provides full interactive API documentation powered by OpenAPI 3.0:
+
+* **Interactive API Console:** [http://localhost:3001/api/docs](http://localhost:3001/api/docs) (Interactive testing with Bearer JWT tokens, schema explorer, and cURL snippets)
+* **Raw OpenAPI Specification:** [http://localhost:3001/api/v1/openapi.json](http://localhost:3001/api/v1/openapi.json) or [`docs/openapi.json`](./docs/openapi.json)
 
 ---
 

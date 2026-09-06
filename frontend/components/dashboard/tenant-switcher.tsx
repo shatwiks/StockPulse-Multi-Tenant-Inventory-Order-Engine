@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, ChevronsUpDown, Plus, Warehouse } from 'lucide-react'
+import { Check, ChevronsUpDown, Plus, Building2 } from 'lucide-react'
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from './menu'
 import { tenants, type Tenant } from '@/lib/nav'
 import { cn } from '@/lib/utils'
@@ -32,8 +32,8 @@ export function TenantSwitcher({
             collapsed && 'justify-center px-0',
           )}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <Warehouse className="size-4" aria-hidden="true" />
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-xs">
+            <Building2 className="size-4" aria-hidden="true" />
           </span>
           {!collapsed && (
             <>
@@ -67,7 +67,7 @@ export function TenantSwitcher({
               aria-current={tenant.id === active.id ? 'true' : undefined}
             >
               <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <Warehouse className="size-3.5" aria-hidden="true" />
+                <Building2 className="size-3.5" aria-hidden="true" />
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-medium">{tenant.name}</span>

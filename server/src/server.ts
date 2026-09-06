@@ -4,12 +4,17 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import apiRoutes from './api/routes';
+import {
+  getApiDocsUiHandler,
+  getOpenApiSpecHandler,
+  getSwaggerUiHandler,
+} from './docs/docs.controller';
 
 dotenv.config();
 
 export const app = express();
 const PORT = process.env.PORT || 3001;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 
 // 1. Enterprise Security Headers (Helmet)
 app.use(
@@ -89,6 +94,30 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
+// Root Landing / Service Info
+app.get('/', (req, res) => {
+  if (req.accepts('html')) {
+    return res.redirect('/docs');
+  }
+  res.json({
+    service: 'StockPulse Multi-Tenant Inventory & Order Engine API',
+    status: 'healthy',
+    version: '2.4.0',
+    documentation: '/docs',
+    endpoints: {
+      health: '/health',
+      apiDocs: '/docs',
+      openApiJson: '/api/v1/openapi.json',
+      apiV1: '/api/v1',
+    },
+    clientApp: CLIENT_URL || 'http://localhost:3000',
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.redirect('/docs');
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
@@ -97,6 +126,13 @@ app.get('/health', (req, res) => {
     service: 'StockPulse Inventory & Order Engine',
   });
 });
+
+// Interactive OpenAPI 3.0 Documentation Consoles
+app.get('/docs', getApiDocsUiHandler);
+app.get('/api/docs', getApiDocsUiHandler);
+app.get('/swagger', getSwaggerUiHandler);
+app.get('/api/swagger', getSwaggerUiHandler);
+app.get('/api/v1/openapi.json', getOpenApiSpecHandler);
 
 // API Routes
 app.use('/api/v1', apiRoutes);

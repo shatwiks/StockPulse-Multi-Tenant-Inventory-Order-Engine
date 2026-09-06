@@ -2,6 +2,8 @@ import { navItems, type Tenant } from '@/lib/nav'
 import { Button } from '@/components/ui/button'
 import { InventoryView } from './inventory-view'
 import { OrderDeskView } from './order-desk-view'
+import { AnalyticsView } from './analytics-view'
+import { OrganizationSettingsView } from './organization-settings-view'
 import { Boxes, ShoppingCart, BarChart3, TrendingUp, AlertTriangle, ArrowRight } from 'lucide-react'
 
 interface ContentAreaProps {
@@ -25,6 +27,24 @@ export function ContentArea({ activeKey, onNavigate, tenant }: ContentAreaProps)
     return (
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-6">
         <OrderDeskView tenant={tenant} />
+      </div>
+    )
+  }
+
+  // View 3: Analytics & Business Intelligence Dashboard
+  if (activeKey === 'analytics') {
+    return (
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-6">
+        <AnalyticsView tenant={tenant} />
+      </div>
+    )
+  }
+
+  // View 4: Organization Settings & Multi-Tenant Governance
+  if (activeKey === 'settings') {
+    return (
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-6">
+        <OrganizationSettingsView tenant={tenant} />
       </div>
     )
   }

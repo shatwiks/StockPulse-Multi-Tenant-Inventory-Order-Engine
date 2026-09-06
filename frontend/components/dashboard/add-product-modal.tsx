@@ -3,10 +3,11 @@
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Modal } from './modal'
+import { AddCategoryModal } from './add-category-modal'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import { toast } from '@/lib/toast-context'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus } from 'lucide-react'
 
 type AddProductModalProps = {
   open: boolean
@@ -34,6 +35,7 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
   const [reorderPoint, setReorderPoint] = useState('10')
   const [description, setDescription] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [showAddCategory, setShowAddCategory] = useState(false)
 
   // Fetch categories from live backend
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
@@ -124,8 +126,9 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
   }
 
   return (
-    <Modal
-      open={open}
+    <>
+      <Modal
+        open={open}
       onClose={onClose}
       title="Add new product"
       description="Create a verified SKU and establish initial inventory stock levels."
@@ -186,9 +189,19 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
             />
           </div>
           <div className="grid gap-1.5">
-            <label htmlFor={catId} className="text-sm font-medium">
-              Category <span className="text-destructive">*</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor={catId} className="text-sm font-medium">
+                Category <span className="text-destructive">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowAddCategory(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                <Plus className="size-3" aria-hidden="true" />
+                <span>New Category</span>
+              </button>
+            </div>
             <select
               id={catId}
               value={categoryId || categoriesList[0]?.id || ''}
@@ -271,5 +284,14 @@ export function AddProductModal({ open, onClose }: AddProductModalProps) {
         </div>
       </form>
     </Modal>
+    <AddCategoryModal
+      open={showAddCategory}
+      onClose={() => setShowAddCategory(false)}
+      onCategoryCreated={(newCat) => {
+        setCategoryId(newCat.id)
+        setShowAddCategory(false)
+      }}
+    />
+  </>
   )
 }

@@ -1,0 +1,36 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "StockPulse Multi-Tenant Inventory & Order Engine API",
+    "version": "1.0.0",
+    "description": "StockPulse is a distributed, high-concurrency B2B inventory management platform and Point-of-Sale (POS) order engine.\n\n### Key Architectural Guarantees\n- **ACID Pessimistic Concurrency**: Eliminates inventory overselling and race conditions via PostgreSQL `SELECT ... FOR UPDATE` row-level locking.\n- **Zero-Wait Deadlock Prevention**: Enforces deterministic ascending ID sorting (`ORDER BY id ASC`) to eliminate Coffman circular wait conditions (C4).\n- **Zero-Trust Multi-Tenancy**: 3-tier defense-in-depth isolation (JWT claims, query-level scoping, database composite unique indexes).\n- **Sub-50ms API Latency**: Hardware-backed database connection pool and optimized indexed queries.",
+    "contact": {
+      "name": "StockPulse Engineering Team",
+      "url": "https://github.com/shatwiks/StockPulse-Multi-Tenant-Inventory-Order-Engine"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Current Environment API Gateway"
+    },
+    {
+      "url": "http://localhost:3001/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your JWT token acquired from /auth/login."
+      }
+    }
+  }
+}

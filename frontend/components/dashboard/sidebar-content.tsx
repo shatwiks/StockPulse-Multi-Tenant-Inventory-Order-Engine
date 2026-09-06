@@ -6,6 +6,8 @@ import type { Tenant } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import { TenantSwitcher } from './tenant-switcher'
 
+import { StockPulseVectorLogo } from '@/components/auth/stockpulse-vector-logo'
+
 type SidebarContentProps = {
   activeKey: string
   onNavigate: (key: string) => void
@@ -27,7 +29,21 @@ export function SidebarContent({
   mobile = false,
 }: SidebarContentProps) {
   return (
-    <div className="flex h-full flex-col gap-4 p-3">
+    <div className="flex h-full flex-col gap-3.5 p-3">
+      {/* Brand Header */}
+      <div className={cn('flex items-center gap-2.5 px-1 py-1', collapsed && 'justify-center px-0')}>
+        <StockPulseVectorLogo size={collapsed ? 28 : 32} animated showGlow />
+        {!collapsed && (
+          <div className="flex flex-col leading-none">
+            <div className="font-display font-bold text-base tracking-tight">
+              <span className="text-[#F3E8E2]">Stock</span>
+              <span className="text-[#F59E0B] font-extrabold ml-0.5">Pulse</span>
+            </div>
+            <span className="text-[11px] font-mono text-amber-200/80 uppercase tracking-wider mt-0.5">Inventory Engine</span>
+          </div>
+        )}
+      </div>
+
       <div className={cn('flex flex-col gap-3', collapsed && 'items-center')}>
         <TenantSwitcher
           active={tenant}

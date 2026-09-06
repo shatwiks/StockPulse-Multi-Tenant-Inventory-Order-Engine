@@ -13,7 +13,25 @@ import {
   placeOrderHandler,
   getOrdersHandler,
 } from '../controllers/order.controller';
-import prisma from '../db/client';
+import {
+  getCategoriesHandler,
+  createCategoryHandler,
+} from '../controllers/category.controller';
+import { getAnalyticsHandler } from '../controllers/analytics.controller';
+import {
+  getOrganizationHandler,
+  updateOrganizationHandler,
+  inviteMemberHandler,
+} from '../controllers/organization.controller';
+import {
+  getFlashSaleProductHandler,
+  resetFlashSaleStockHandler,
+} from '../controllers/concurrency.controller';
+import { getSystemHealthHandler } from '../controllers/health.controller';
+import {
+  getOpenApiSpecHandler,
+  getApiDocsUiHandler,
+} from '../docs/docs.controller';
 
 const router = Router();
 
@@ -29,19 +47,14 @@ router.get(
   '/categories',
   authenticateToken,
   requireRole(['ADMIN', 'MANAGER', 'CASHIER']),
-  async (req, res) => {
-    try {
-      const organizationId = req.user!.organizationId;
-      const categories = await prisma.category.findMany({
-        where: { organizationId },
-        orderBy: { name: 'asc' },
-      });
-      res.json({ success: true, data: categories });
-    } catch (err: any) {
-      console.error('Error fetching categories:', err);
-      res.status(500).json({ success: false, error: 'FETCH_CATEGORIES_FAILED', message: err.message });
-    }
-  }
+  getCategoriesHandler
+);
+
+router.post(
+  '/categories',
+  authenticateToken,
+  requireRole(['ADMIN', 'MANAGER']),
+  createCategoryHandler
 );
 
 // ============================================================================
@@ -107,5 +120,80 @@ router.get(
   requireRole(['ADMIN', 'MANAGER', 'CASHIER']),
   getOrdersHandler
 );
+
+// ============================================================================
+// 5. Analytics & Business Intelligence (RBAC Protected)
+// ============================================================================
+
+// ADMIN and MANAGER can view aggregated analytics and BI reports
+router.get(
+  '/analytics',
+  authenticateToken,
+  requireRole(['ADMIN', 'MANAGER']),
+  getAnalyticsHandler
+);
+
+// ============================================================================
+// 6. Organization & Multi-Tenant Management (RBAC Protected)
+// ============================================================================
+
+// All authenticated users in tenant can view organization profile & team roster
+router.get(
+  '/organization',
+  authenticateToken,
+  requireRole(['ADMIN', 'MANAGER', 'CASHIER']),
+  getOrganizationHandler
+);
+
+// Only ADMIN can update organization settings
+router.patch(
+  '/organization',
+  authenticateToken,
+  requireRole(['ADMIN']),
+  updateOrganizationHandler
+);
+
+// Only ADMIN can invite/provision new tenant members
+router.post(
+  '/organization/users',
+  authenticateToken,
+  requireRole(['ADMIN']),
+  inviteMemberHandler
+);
+
+// ============================================================================
+// 7. Interactive Concurrency Demo & Stress-Test Routes
+// ============================================================================
+
+// Fetch or create dedicated demo SKU for live parallel checkout stress-testing
+router.get(
+  '/concurrency/demo-product',
+  authenticateToken,
+  getFlashSaleProductHandler
+);
+
+// Reset demo SKU stock for repeatable recruiter stress-testing
+router.post(
+  '/concurrency/reset-stock',
+  authenticateToken,
+  resetFlashSaleStockHandler
+);
+
+// ============================================================================
+// 8. System Telemetry & Operational Observability Routes
+// ============================================================================
+
+// Returns PostgreSQL connection pool health, latency SLAs, and live audit stream
+router.get(
+  '/system/health',
+  authenticateToken,
+  getSystemHealthHandler
+);
+
+// ============================================================================
+// 9. OpenAPI 3.0 Documentation & Specification Routes (Public)
+// ============================================================================
+router.get('/openapi.json', getOpenApiSpecHandler);
+router.get('/docs', getApiDocsUiHandler);
 
 export default router;
