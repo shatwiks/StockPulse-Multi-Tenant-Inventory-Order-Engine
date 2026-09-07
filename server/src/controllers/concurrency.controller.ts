@@ -17,7 +17,7 @@ const fallbackDemoProduct = {
   stockQuantity: 5,
   reorderLevel: 2,
   categoryId: 'cat-1',
-  status: ProductStatus.ACTIVE,
+  status: ProductStatus.ACTIVE as ProductStatus,
 };
 
 export const resetStockSchema = z.object({

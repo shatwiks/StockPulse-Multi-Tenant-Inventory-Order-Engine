@@ -8,7 +8,7 @@
     "server"
   ],
   "scripts": {
-    "dev": "concurrently -n \"server,frontend\" -c \"blue,green\" \"npm run dev --prefix server\" \"npm run dev --prefix frontend\"",
+    "dev": "node scripts/dev.js",
     "build": "npm run build --prefix server && npm run build --prefix frontend",
     "dev:server": "npm run dev --prefix server",
     "dev:frontend": "npm run dev --prefix frontend",
