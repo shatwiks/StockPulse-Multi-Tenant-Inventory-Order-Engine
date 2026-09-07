@@ -5,28 +5,31 @@
   "description": "StockPulse: Multi-Tenant B2B Inventory & Order Engine",
   "workspaces": [
     "frontend",
-    "server"
+    "backend"
   ],
   "scripts": {
+    "start": "node scripts/dev.js",
     "dev": "node scripts/dev.js",
-    "build": "npm run build --prefix server && npm run build --prefix frontend",
-    "dev:server": "npm run dev --prefix server",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:server": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
-    "build:server": "npm run build --prefix server",
+    "build:backend": "npm run build --prefix backend",
+    "build:server": "npm run build --prefix backend",
     "build:frontend": "npm run build --prefix frontend",
-    "db:migrate": "npm run db:migrate --prefix server",
-    "db:seed": "npm run db:seed --prefix server",
-    "db:push": "npm run db:push --prefix server",
-    "test:constraints": "npm run test:constraints --prefix server",
-    "test:checkout": "npm run test:checkout --prefix server",
-    "test:phase2": "npm run test:phase2 --prefix server",
-    "test:phase3": "npm run test:phase3 --prefix server",
-    "test:concurrency-demo": "npm run test:concurrency-demo --prefix server",
-    "test:health": "npm run test:health --prefix server",
-    "test:docs": "npm run test:docs --prefix server",
+    "db:migrate": "npm run db:migrate --prefix backend",
+    "db:seed": "npm run db:seed --prefix backend",
+    "db:push": "npm run db:push --prefix backend",
+    "test:constraints": "npm run test:constraints --prefix backend",
+    "test:checkout": "npm run test:checkout --prefix backend",
+    "test:phase2": "npm run test:phase2 --prefix backend",
+    "test:phase3": "npm run test:phase3 --prefix backend",
+    "test:concurrency-demo": "npm run test:concurrency-demo --prefix backend",
+    "test:health": "npm run test:health --prefix backend",
+    "test:docs": "npm run test:docs --prefix backend",
     "test:a11y": "npm run test:a11y --prefix frontend",
     "test:all": "npm run test:constraints && npm run test:checkout && npm run test:phase2 && npm run test:phase3 && npm run test:concurrency-demo && npm run test:health && npm run test:docs && npm run test:a11y",
-    "docker:seed": "docker compose exec server npx tsx prisma/seed.ts"
+    "docker:seed": "docker compose exec backend npx tsx prisma/seed.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

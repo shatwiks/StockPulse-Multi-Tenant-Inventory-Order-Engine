@@ -101,6 +101,28 @@ The StockPulse interface is engineered with a dark-walnut and warm-amber aesthet
 
 ---
 
+## 📁 Repository Structure
+
+```text
+├── backend/          # Node.js Express + TypeScript REST API, Prisma ORM, PostgreSQL database engine
+│   ├── prisma/       # Prisma schema, migrations, and tenant seed scripts
+│   ├── scripts/      # Verification test suites (concurrency, constraints, security, health)
+│   └── src/          # API routes, controllers, middleware, and database client
+├── frontend/         # Next.js 16 + React 19 UI, Tailwind CSS, TanStack Query, Lucide icons
+│   ├── app/          # App router pages (dashboard, login, privacy, terms, not-found)
+│   ├── components/   # UI components, dashboard widgets, and modals
+│   └── lib/          # API client, state hooks, and utilities
+├── docs/             # Technical Documentation & Specifications
+│   ├── adr/          # Architecture Decision Records (ADR-001, ADR-002, ADR-003)
+│   ├── openapi.json  # Interactive OpenAPI 3.0 REST specification
+│   ├── screenshots/  # Enterprise UI and architectural walkthrough screenshots
+│   ├── DESIGN.md     # Design tokens, color system, and UI/UX design specifications
+│   └── PRODUCT.md    # Product architecture, functional requirements & data model
+└── scripts/          # Root dev orchestration runner (dev.js) & Docker seeding utilities
+```
+
+---
+
 ## 💻 Local Development & Quickstart
 
 ### Prerequisites
@@ -146,7 +168,7 @@ npm install
 npm run db:migrate
 npm run db:seed
 
-# 3. Launch Express server (:3001) and Next.js frontend (:3000) concurrently
+# 3. Launch Express backend (:3001) and Next.js frontend (:3000) concurrently
 npm run dev
 
 ```
@@ -261,11 +283,13 @@ npm run test:a11y              # 100% WCAG 2.1 AA accessibility audit (64 contro
 
 ## 🏛️ Architecture Decision Records (ADRs)
 
-Staff and Principal-level design decisions and mathematical invariant proofs are documented in the [`docs/adr/`](./docs/adr/README.md) directory:
+Staff and Principal-level design decisions, mathematical invariant proofs, and product specifications are documented in the [`docs/`](./docs/) directory:
 
 * [**ADR-001: Pessimistic Row-Level Locking for Concurrent Checkouts**](./docs/adr/ADR-001-pessimistic-concurrency-control.md): Analysis of Pessimistic Row Locking (`SELECT ... FOR UPDATE`) vs Optimistic Concurrency Control (OCC) vs Distributed Locks (Redis Redlock), evaluating network partitions, clock skew, and inventory conservation invariants.
 * [**ADR-002: Multi-Tenant Data Partitioning & Isolation Strategy**](./docs/adr/ADR-002-multi-tenant-partitioning-strategy.md): Analysis of Database-per-tenant vs Schema-per-tenant vs Shared Database with Discriminator Column (`organization_id`), composite index design, and 3-layer defense-in-depth isolation.
 * [**ADR-003: Deterministic Lock Acquisition Ordering for Deadlock Elimination**](./docs/adr/ADR-003-deadlock-prevention-lock-ordering.md): Mathematical proof eliminating Coffman cyclic wait condition ($C_4$) through deterministic lexicographical ascending sorting (`ORDER BY id ASC`).
+* [**Product Architecture & Requirements Specification**](./docs/PRODUCT.md): Complete multi-tenant B2B functional scope, data invariants, and compliance policies.
+* [**Design System & UI Tokens**](./docs/DESIGN.md): Visual hierarchy, typography, dark walnut color palettes, and component standards.
 
 ---
 
@@ -284,7 +308,7 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push and 
 
 * **PostgreSQL 16 Service Container:** Boots an isolated PostgreSQL service with an active readiness polling loop (`pg_isready`).
 * **Deterministic Installation:** Runs `npm install` across all monorepo workspaces and generates the Linux-native Prisma query engine.
-* **Zero-Tolerance Typecheck:** Runs `tsc --noEmit` across both `server/` and `frontend/`.
+* **Zero-Tolerance Typecheck:** Runs `tsc --noEmit` across both `backend/` and `frontend/`.
 * **Automated Accessibility Testing:** Runs the AST scanner ensuring all interactive controls have accessible names and dialogs implement focus containment.
 * **Migration & Concurrency Suite:** Deploys schema DDL, runs the seed script, and triggers 10 simultaneous checkout requests against 2 units of stock—validating that exactly 1 succeeds (`201`), 9 roll back (`409`), and final stock remains at 0.
 

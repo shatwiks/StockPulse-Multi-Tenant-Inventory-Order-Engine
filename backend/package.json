@@ -1,5 +1,5 @@
 {
-  "name": "stockpulse-server",
+  "name": "stockpulse-backend",
   "version": "1.0.0",
   "description": "StockPulse Multi-Tenant Inventory & Order Engine Backend API",
   "main": "dist/index.js",
@@ -7,7 +7,7 @@
     "build": "node -e \"require('typescript/bin/tsc')\"",
     "start": "node --import tsx src/server.ts",
     "dev": "node --import tsx --watch src/server.ts",
-    "db:generate": "node -e \"require('prisma/build/index.js')\" generate",
+    "db:generate": "node -e \"require('prisma/build/index.js')\" generate && node -e \"const fs=require('fs'),p=require('path');const s=p.join(__dirname,'node_modules/.prisma'),d=p.join(__dirname,'../node_modules/.prisma');if(fs.existsSync(s)&&fs.existsSync(p.join(__dirname,'../node_modules'))){fs.cpSync(s,d,{recursive:true});}\"",
     "db:migrate": "node -e \"require('prisma/build/index.js')\" migrate deploy",
     "db:migrate:dev": "node -e \"require('prisma/build/index.js')\" migrate dev",
     "db:push": "node -e \"require('prisma/build/index.js')\" db push",

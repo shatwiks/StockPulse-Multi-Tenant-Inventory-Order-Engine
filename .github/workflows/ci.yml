@@ -48,7 +48,7 @@ jobs:
         run: |
           echo "Installing root and workspace dependencies..."
           npm install --include-workspace-root
-          npm install --prefix server
+          npm install --prefix backend
           npm install --prefix frontend
 
       - name: Wait for PostgreSQL Readiness
@@ -66,13 +66,13 @@ jobs:
           exit 1
 
       - name: Generate Prisma Client (Linux Runner Environment)
-        working-directory: server
+        working-directory: backend
         run: npx prisma generate
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
 
-      - name: Run Strict TypeScript Verification (Server)
-        working-directory: server
+      - name: Run Strict TypeScript Verification (Backend)
+        working-directory: backend
         run: npx tsc --noEmit
 
       - name: Run Strict TypeScript Verification (Frontend)
@@ -84,28 +84,28 @@ jobs:
         run: npx tsx scripts/verify-a11y.ts
 
       - name: Deploy PostgreSQL Migrations
-        working-directory: server
+        working-directory: backend
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           NODE_ENV: test
 
       - name: Seed Multi-Tenant Organizations & Inventory
-        working-directory: server
+        working-directory: backend
         run: npx tsx prisma/seed.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           NODE_ENV: test
 
       - name: Verify Relational Check Constraints
-        working-directory: server
+        working-directory: backend
         run: npx tsx scripts/verify-constraints.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           NODE_ENV: test
 
       - name: Run Phase 2 Security, RBAC & Concurrency Stress Test Suite
-        working-directory: server
+        working-directory: backend
         run: npx tsx scripts/verify-phase2.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -114,7 +114,7 @@ jobs:
           PORT: 3001
 
       - name: Run Phase 3 Frontend API & POS Integration Test Suite
-        working-directory: server
+        working-directory: backend
         run: npx tsx scripts/verify-phase3.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -123,7 +123,7 @@ jobs:
           PORT: 3001
 
       - name: Run Concurrency Stress-Test Verification
-        working-directory: server
+        working-directory: backend
         run: npx tsx scripts/verify-concurrency-demo.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -132,7 +132,7 @@ jobs:
           PORT: 3001
 
       - name: Run System Telemetry & Connection Pool Health Verification
-        working-directory: server
+        working-directory: backend
         run: npx tsx scripts/verify-system-health.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -141,7 +141,7 @@ jobs:
           PORT: 3001
 
       - name: Run Architecture Records (ADRs) & OpenAPI 3.0 Verification
-        working-directory: server
+        working-directory: backend
         run: npx tsx scripts/verify-api-docs.ts
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -149,8 +149,8 @@ jobs:
           NODE_ENV: test
           PORT: 3001
 
-      - name: Build Production Artifacts (Server)
-        working-directory: server
+      - name: Build Production Artifacts (Backend)
+        working-directory: backend
         run: npm run build
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}

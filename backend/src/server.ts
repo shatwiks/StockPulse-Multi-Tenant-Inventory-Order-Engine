@@ -64,16 +64,24 @@ app.use(
   })
 );
 
-// 3. Rate Limiting Middleware (Brute-force & DoS mitigation)
+// 3. Rate Limiting Middleware (Strict in production, relaxed in development)
+const isDevOrTest = process.env.NODE_ENV !== 'production';
 const apiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per window
+  max: isDevOrTest ? 50000 : 200, // Generous allowance in dev/test to prevent HMR/TanStack Query from choking
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
     error: 'TOO_MANY_REQUESTS',
     message: 'Rate limit exceeded. Please retry after 15 minutes.',
+  },
+  skip: (req) => {
+    if (isDevOrTest) {
+      const ip = req.ip || req.socket.remoteAddress || '';
+      return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip.includes('localhost');
+    }
+    return false;
   },
 });
 app.use('/api/', apiRateLimiter);

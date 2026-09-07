@@ -17,11 +17,11 @@ services:
       timeout: 5s
       retries: 5
 
-  server:
+  backend:
     build:
-      context: ./server
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: stockpulse-server
+    container_name: stockpulse-backend
     restart: unless-stopped
     depends_on:
       postgres:
@@ -42,7 +42,7 @@ services:
     container_name: stockpulse-frontend
     restart: unless-stopped
     depends_on:
-      - server
+      - backend
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
       NODE_ENV: production
