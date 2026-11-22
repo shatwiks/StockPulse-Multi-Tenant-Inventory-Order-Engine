@@ -39,7 +39,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.10.1",
     "bcrypt": "npm:bcryptjs@^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
