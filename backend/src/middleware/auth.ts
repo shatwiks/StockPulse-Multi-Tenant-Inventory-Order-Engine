@@ -4,7 +4,17 @@ import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../types/express';
 import { sendError } from '../utils/response';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'enterprise-grade-stockpulse-jwt-secret-key-replace-in-production';
+const DEV_FALLBACK_JWT_SECRET = 'enterprise-grade-stockpulse-jwt-secret-key-replace-in-production';
+const envJwtSecret = process.env.JWT_SECRET?.trim();
+if (
+  process.env.NODE_ENV === 'production' &&
+  (!envJwtSecret || envJwtSecret === DEV_FALLBACK_JWT_SECRET || envJwtSecret.length < 32)
+) {
+  throw new Error(
+    'CRITICAL SECURITY VIOLATION: JWT_SECRET must be explicitly set (>= 32 chars) in production.'
+  );
+}
+const JWT_SECRET = envJwtSecret || DEV_FALLBACK_JWT_SECRET;
 const JWT_EXPIRES_IN = '24h';
 
 export interface TokenPayload {

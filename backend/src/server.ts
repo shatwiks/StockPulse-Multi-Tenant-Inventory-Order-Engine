@@ -16,11 +16,19 @@ export const app = express();
 const PORT = process.env.PORT || 3001;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 
+app.disable('x-powered-by');
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // 1. Enterprise Security Headers (Helmet)
 app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    frameguard: { action: 'deny' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true } : false,
   })
 );
 
@@ -85,6 +93,26 @@ const apiRateLimiter = rateLimit({
   },
 });
 app.use('/api/', apiRateLimiter);
+
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDevOrTest ? 5000 : 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'TOO_MANY_AUTH_REQUESTS',
+    message: 'Too many authentication attempts. Please retry in 15 minutes.',
+  },
+  skip: (req) => {
+    if (isDevOrTest) {
+      const ip = req.ip || req.socket.remoteAddress || '';
+      return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip.includes('localhost');
+    }
+    return false;
+  },
+});
+app.use('/api/v1/auth', authRateLimiter);
 
 // 4. Request Body Parsers with 1MB Payload Limit
 app.use(express.json({ limit: '1mb' }));
